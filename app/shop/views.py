@@ -21,6 +21,7 @@ class ListProductView(generics.ListAPIView):
     """List the products available at the shop"""
     serializer_class = ProductSerializer
     queryset = models.Product.objects.all()
+    renderer_classes = [JSONRenderer]
    
 #viewsets.ModelViewSet
 
@@ -30,7 +31,8 @@ class ListCartView(viewsets.ModelViewSet):
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = (permissions.UpdateOwnCart, )
     queryset = models.Cart.objects.all()
-    http_method_names = ['get',  'patch', ]
+    http_method_names = ['get',  'patch']
+    renderer_classes = [JSONRenderer]
     
     def grab_product_from_cart(self, request):
         """This returns products from cart."""
@@ -46,7 +48,14 @@ class ListCartView(viewsets.ModelViewSet):
     def list(self, request):
         """Returns the list of products in the user's cart"""
         products = self.grab_product_from_cart(request)
-        return Response(products)
+        user_cart = models.Cart.objects.filter(user=request.user)
+        serializer = self.serializer_class(user_cart, many=True)
+        print(serializer.data[0]['id'])
+        
+        
+        
+        return Response({'id':serializer.data[0]['id'],'products': products} )
+    
     
     
     

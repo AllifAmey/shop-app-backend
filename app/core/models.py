@@ -9,6 +9,8 @@ from django.contrib.auth.models import (
     PermissionsMixin
 )
 
+from shop.models import Cart, Order, Delivery
+
 class UserManager(BaseUserManager):
     """Manager for users."""
 
@@ -19,6 +21,10 @@ class UserManager(BaseUserManager):
         user = self.model(email=self.normalize_email(email), **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
+        # default models added to user upon creation of user.
+        Cart.objects.create(user=user)
+        Order.objects.create(user=user)
+        Delivery.objects.create(user=user)
 
         return user
     

@@ -38,9 +38,38 @@ class Cart(models.Model):
 		on_delete=models.CASCADE
 		)
     products = models.ManyToManyField(
-        Product
+        Product,
+        blank=True
     )
 
     def __str__(self):
         """Return the model as a string"""
         return f'{self.user}\'s cart'
+    
+class Order(models.Model):
+    """Orders for each user"""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
+    
+    orders = models.ManyToManyField(
+        Cart,
+        blank=True
+    )
+    
+    def __str__(self):
+        """Return the model as a string"""
+        return f'{self.user}\'s order'
+    
+class Delivery(models.Model):
+    """Delivery status for each user"""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
+    delivery_status = models.CharField(max_length=255, blank=True)
+    
+    def __str__(self):
+        """Return the model as a string"""
+        return f'{self.user}\'s delivery'

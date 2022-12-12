@@ -48,14 +48,10 @@ class Cart(models.Model):
     
 class Order(models.Model):
     """Orders for each user"""
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     
-    orders = models.ManyToManyField(
-        Cart,
-        blank=True
+    products = models.ManyToManyField(
+        Product,
     )
     
     def __str__(self):
@@ -64,12 +60,13 @@ class Order(models.Model):
     
 class Delivery(models.Model):
     """Delivery status for each user"""
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE
+    order = models.OneToOneField(
+        Order,
+        on_delete=models.CASCADE,
+        null=True
     )
     delivery_status = models.CharField(max_length=255, blank=True)
     
     def __str__(self):
         """Return the model as a string"""
-        return f'{self.user}\'s delivery'
+        return f'{self.order}\'s delivery'

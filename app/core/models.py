@@ -23,9 +23,7 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         # default models added to user upon creation of user.
         Cart.objects.create(user=user)
-        Order.objects.create(user=user)
-        Delivery.objects.create(user=user)
-
+        
         return user
     
     def create_superuser(self, email, password):

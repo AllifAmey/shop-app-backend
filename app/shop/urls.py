@@ -19,5 +19,7 @@ router.register('cart', views.ListCartView, basename="cart")
 
 urlpatterns = [
     path('products/', views.ListProductView.as_view(), name='products'),
+    path('orders/', views.RetrievePostOrderView.as_view(), name='orders'),
+    path('delivery/', views.RetrieveDeliveryView.as_view(), name='delivery'),
     path('', include(router.urls))
 ]

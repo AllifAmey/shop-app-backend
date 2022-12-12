@@ -26,15 +26,15 @@ class CartSerializer(serializers.ModelSerializer):
         model = models.Cart
         fields = ['id', 'user', 'products']
         
-class OrderSerializer(serializers.ModelSerializer):
+class OrderSerializer(serializers.ModelSerializer)  :
     """Serializes Order Model"""
     class Meta:
-        model = models.Cart
-        fields = ['id', 'user', 'orders']
+        model = models.Order
+        fields = ['id', 'user', 'products']
         
 class DeliverySerializer(serializers.ModelSerializer):
     """Serializes Delivery Model"""
     class Meta:
-        model = models.Cart
-        fields = ['id', 'user', 'delivery_status']
+        model = models.Delivery
+        fields = ['id', 'order', 'delivery_status']
         

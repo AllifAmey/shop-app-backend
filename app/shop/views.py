@@ -77,10 +77,28 @@ class RetrievePostOrderView(APIView):
         
         queryset_order = models.Order.objects.filter(user=request.user)
         
+        #queryset_delivery = models.Delivery.objects.filter(user=request.user)
+        
         # checks if user has orders else return no orders
         if queryset_order:
-            order_serialized = self.serializer_class(queryset_order, many=True)
-            return Response(order_serialized.data, status=status.HTTP_200_OK)
+            
+            entire_order = {'orders': []}
+            print(queryset_order)
+            for order_obj in queryset_order:
+                delivery_obj = models.Delivery.objects.get(order=order_obj)
+                serializer = DeliverySerializer(delivery_obj)
+                order_serialized = self.serializer_class(order_obj)
+                products = order_serialized.data['products']
+                user_cart_products = models.Product.objects.filter(pk__in=products)
+                products_serialized = ProductSerializer(user_cart_products, many=True)
+                
+                individual_order = {
+                    'order' : products_serialized.data,
+                    'delivery status': serializer.data['delivery_status']}
+                
+                entire_order['orders'].append(individual_order)
+            
+            return Response(entire_order, status=status.HTTP_200_OK)
         else:
             error_msg = {"You have no orders"}
             return Response(error_msg , status=status.HTTP_404_NOT_FOUND)

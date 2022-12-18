@@ -11,8 +11,10 @@ from shop import models
 from shop.serializers import (
     ProductSerializer,
     CartSerializer,
+    CartItemSerializer,
     OrderSerializer,
-    DeliverySerializer
+    OrderItemSerializer,
+    OrderListSerializer,
 )
 from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import get_object_or_404
@@ -63,9 +65,9 @@ class ListCartView(viewsets.ModelViewSet):
 
 
 #Order and delivery APIView
-
+"""
 class RetrievePostOrderView(APIView):
-    """Retrieves the order to the shop the user made and allows posting orders"""
+    \"""Retrieves the order to the shop the user made and allows posting orders\"""
     serializer_class = OrderSerializer
     queryset = models.Order.objects.all()
     renderer_classes = [JSONRenderer]
@@ -73,7 +75,7 @@ class RetrievePostOrderView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Returns the list of products in the user's order"""
+        \"""Returns the list of products in the user's order\"""
         
         queryset_order = models.Order.objects.filter(user=request.user)
         
@@ -106,7 +108,7 @@ class RetrievePostOrderView(APIView):
        
     
     def post(self, request):
-        """Edits the order upon successful transaction"""
+        \"""Edits the order upon successful transaction\"""
         user_cart = models.Cart.objects.get(user=request.user)
         
         serializer = CartSerializer(user_cart)
@@ -134,13 +136,13 @@ class RetrievePostOrderView(APIView):
                 'message': success_msg, 
                 'products ordered': products_serialized.data, 
                 'delivery status': delivery_serialized.data}, status=status.HTTP_201_CREATED)
-            
+"""            
             
         
         
-    
+"""
 class RetrieveDeliveryView(APIView):
-    """Retrieves the delivery status of the user's order"""
+    \"""Retrieves the delivery status of the user's order\"""
     serializer_class = DeliverySerializer
     queryset = models.Delivery.objects.all()
     renderer_classes = [JSONRenderer]
@@ -148,7 +150,7 @@ class RetrieveDeliveryView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
-        """Allows the delivery status to be edited by admin"""
+        \"""Allows the delivery status to be edited by admin\"""
         user = request.user
         
         if user.is_staff:
@@ -160,22 +162,56 @@ class RetrieveDeliveryView(APIView):
         else:
             error_msg = {"You are not authorised to edit other user's delivery status"}
             return Response(error_msg, status=status.HTTP_403_FORBIDDEN)
-        
+"""
         
 # new apis involving the new models
+
+class CartView(APIView):
+    """Users can see and post cart items"""
     
-    
-class ExperimentView(APIView):
-    """Adding multiple models to one model"""
+    serializer_class = CartSerializer
+    queryset = models.Cart.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        # cart products field
-        user_cart = models.Cart.objects.get(user=request.user)
-        print(user_cart)
-        products = models.Product.objects.get(id=3)
-        print(products)
-        products = [products, products, products]
-        user_cart.products.set(products)
-        user_cart.save()
-        return Response({'cart': "hello"})
+        """Displays user's cart"""
+        user = request.user
+        user_cart = models.Cart.objects.get(user=user)
+        # CartItemSerializer
+        serializer = self.serializer_class(user_cart)
+        products = serializer.data['products']
+        products = models.CartItem.objects.filter(pk__in=products)
+        serializer = CartItemSerializer(products, many=True)
+        user_cart = {}
+        counter = 1
+        for product in products:
+            print(product)
+            serializer = ProductSerializer(product.product)
+            user_cart[f'cart item {counter}'] = {'product': serializer.data,
+                                                 'quantity': product.quantity}
+            counter += 1
+        
+        return Response(user_cart)
+
+class OrderListView(APIView):
+    """Users can see their list of orders """
+    serializer_class = OrderListSerializer
+    queryset = models.OrderList.objects.all()
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Display user's list of orders"""
+        user = request.user
+        user_order_list = models.OrderList.objects.get(user=user)
+        serializer = self.serializer_class(user_order_list)
+        print(serializer.data["order_list"])
+        orders = serializer.data["order_list"]
+        order = models.Order.objects.filter(pk__in=orders)
+        serializer = OrderSerializer(order, many=True)
+        
+        
+        return Response(serializer.data)
+    
+

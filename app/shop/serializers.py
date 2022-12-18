@@ -5,20 +5,17 @@ from rest_framework import serializers
 
 from shop import models
 
-"""
- name = models.CharField(max_length=255)
-    image_url = models.URLField(max_length=255)
-    price = models.DecimalField(..., max_digits=5, decimal_places=2)
-    description_short = models.TextField()
-    description_long = models.TextField()
-
-"""
-
 class ProductSerializer(serializers.ModelSerializer):
     """Serializes Product Model"""
     class Meta:
         model = models.Product
         fields = ['id', 'name', 'image_url', 'price', 'description_short', 'description_long']
+
+class CartItemSerializer(serializers.ModelSerializer):
+    """Serializes the Cart Item Model"""
+    class Meta:
+        model = models.CartItem
+        fields = ['id', 'product', 'quantity']
 
 class CartSerializer(serializers.ModelSerializer):
     """Serializes Cart Model"""
@@ -26,15 +23,23 @@ class CartSerializer(serializers.ModelSerializer):
         model = models.Cart
         fields = ['id', 'user', 'products']
         
+class OrderItemSerializer(serializers.ModelSerializer)  :
+    """Serializes Order Model"""
+    class Meta:
+        model = models.OrderItem
+        fields = ['id', 'user', 'product', 'quantity', 'date_ordered']
+        
 class OrderSerializer(serializers.ModelSerializer)  :
     """Serializes Order Model"""
     class Meta:
         model = models.Order
-        fields = ['id', 'user', 'products']
+        fields = ['id', 'user', 'order', 'delivery_status', 'date_ordered', 'total_price']
         
-class DeliverySerializer(serializers.ModelSerializer):
-    """Serializes Delivery Model"""
+class OrderListSerializer(serializers.ModelSerializer)  :
+    """Serializes OrderList Model"""
     class Meta:
-        model = models.Delivery
-        fields = ['id', 'order', 'delivery_status']
+        model = models.OrderList
+        fields = ['id', 'user', 'order_list']
+        
+
         

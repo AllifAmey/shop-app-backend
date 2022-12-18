@@ -31,32 +31,89 @@ class Product(models.Model):
         """Return the model as a string"""
         return self.name
 
+class CartItem(models.Model):
+    """Individual product with quantity in Cart"""
+    user = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE
+		)
+    product = models.OneToOneField(
+        Product,
+        on_delete=models.CASCADE
+    )
+    quantity = models.IntegerField(
+    )
+    
+    def __str__(self):
+         """Return the model as a string"""
+         return f'{self.user} wants {self.product} {self.quantity} times'
+
 class Cart(models.Model):
     """Cart for each user"""
     user = models.OneToOneField(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.CASCADE
 		)
+    
     products = models.ManyToManyField(
-        Product,
-        blank=True
+        CartItem,
+        blank=True,
     )
 
     def __str__(self):
         """Return the model as a string"""
         return f'{self.user}\'s cart'
     
+class OrderItem(models.Model):
+    """Individual product ordered by the User"""
+    user = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE
+		)
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE
+    )
+    quantity = models.IntegerField()
+    date_ordered = models.DateField(
+        auto_now=True
+    )
+    
+    
+    def __str__(self):
+         """Return the model as a string"""
+         return f'{self.user} ordered {self.product} {self.quantity} times at {self.date_ordered}'
+    
 class Order(models.Model):
     """Orders for each user"""
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     
-    products = models.ManyToManyField(
-        Product,
+    order = models.ManyToManyField(
+        OrderItem,
+    )
+    
+    date_ordered = models.DateField(
+        auto_now=True
+    )
+    
+    
+    def __str__(self):
+        """Return the model as a string"""
+        return f'{self.user}\'s order posted at {self.date_ordered}'
+    
+class OrderList(models.Model):
+    "Complete list of Orders for each User"
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE
+    )
+    order_list = models.ManyToManyField(
+        Order,
     )
     
     def __str__(self):
         """Return the model as a string"""
-        return f'{self.user}\'s order'
+        return f'{self.user}\'s list of orders'
     
 class Delivery(models.Model):
     """Delivery status for each user"""

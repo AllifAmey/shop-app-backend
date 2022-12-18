@@ -83,7 +83,7 @@ class RetrievePostOrderView(APIView):
         if queryset_order:
             
             entire_order = {'orders': []}
-            print(queryset_order)
+       
             for order_obj in queryset_order:
                 delivery_obj = models.Delivery.objects.get(order=order_obj)
                 serializer = DeliverySerializer(delivery_obj)
@@ -107,9 +107,6 @@ class RetrievePostOrderView(APIView):
     
     def post(self, request):
         """Edits the order upon successful transaction"""
-        user = request.user
-        print(user)
-        print(request.data)
         user_cart = models.Cart.objects.get(user=request.user)
         
         serializer = CartSerializer(user_cart)
@@ -147,17 +144,8 @@ class RetrieveDeliveryView(APIView):
     serializer_class = DeliverySerializer
     queryset = models.Delivery.objects.all()
     renderer_classes = [JSONRenderer]
-  
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        """Returns the list of products in the user's cart"""
-        user = request.user
-        user_delivery = models.Delivery.objects.filter(user=user)
-        serializer = self.serializer_class(user_delivery, many=True)
-        
-        return Response({'delivery status':serializer.data[0]['delivery_status']})
     
     def post(self, request):
         """Allows the delivery status to be edited by admin"""
@@ -172,6 +160,22 @@ class RetrieveDeliveryView(APIView):
         else:
             error_msg = {"You are not authorised to edit other user's delivery status"}
             return Response(error_msg, status=status.HTTP_403_FORBIDDEN)
+        
+        
+# new apis involving the new models
     
     
+class ExperimentView(APIView):
+    """Adding multiple models to one model"""
+    authentication_classes = [authentication.TokenAuthentication]
     
+    def get(self, request):
+        # cart products field
+        user_cart = models.Cart.objects.get(user=request.user)
+        print(user_cart)
+        products = models.Product.objects.get(id=3)
+        print(products)
+        products = [products, products, products]
+        user_cart.products.set(products)
+        user_cart.save()
+        return Response({'cart': "hello"})

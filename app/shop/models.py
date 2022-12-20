@@ -37,7 +37,7 @@ class CartItem(models.Model):
 		settings.AUTH_USER_MODEL,
 		on_delete=models.CASCADE
 		)
-    product = models.OneToOneField(
+    product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE
     )
@@ -91,6 +91,7 @@ class Order(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     order = models.ManyToManyField(
         OrderItem,
+        
     )
     delivery_status = models.CharField(max_length=255, blank=True, default="Processing Order")
     date_ordered = models.DateField(

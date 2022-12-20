@@ -13,13 +13,14 @@ app_name = 'shop'
 
 router = DefaultRouter()
 
-router.register('cart', views.ListCartView, basename="cart")
-# path('cart/', views.ListCartView.as_view(), name='cart'),
-# products/
+
+router.register('cart/items', views.CartItemViewset, basename="user cart items")
+router.register('orders', views.OrderViewset, basename="user orders")
+router.register('individual_order', views.OrderItemViewset, basename="user order item")
 
 urlpatterns = [
     path('products/', views.ListProductView.as_view(), name='products'),
-    path('user/cart/', views.CartView.as_view(), name='user cart'),
+   
     path('user/orders/', views.OrderListView.as_view(), name='user list of orders'),
     path('', include(router.urls))
 ]

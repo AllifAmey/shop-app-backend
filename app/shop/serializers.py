@@ -15,7 +15,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     """Serializes the Cart Item Model"""
     class Meta:
         model = models.CartItem
-        fields = ['id', 'product', 'quantity']
+        fields = ['id', 'user', 'product', 'quantity']
 
 class CartSerializer(serializers.ModelSerializer):
     """Serializes Cart Model"""

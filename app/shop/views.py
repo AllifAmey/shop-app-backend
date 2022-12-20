@@ -25,6 +25,8 @@ from rest_framework.permissions import IsAuthenticated
 from shop import permissions
 from shop import models
 
+
+
 class ListProductView(generics.ListAPIView):
     """List the products available at the shop"""
     serializer_class = ProductSerializer
@@ -166,33 +168,83 @@ class RetrieveDeliveryView(APIView):
         
 # new apis involving the new models
 
-class CartView(APIView):
-    """Users can see and post cart items"""
-    
-    serializer_class = CartSerializer
-    queryset = models.Cart.objects.all()
+# this is now the standard
+# TODO: Make sure when cart item is created attach to user - change post method
+
+class CartItemViewset(viewsets.ModelViewSet):
+    """Users can create cart items"""
+    serializer_class = CartItemSerializer
+    queryset = models.CartItem.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = (permissions.UpdateOwnCart, )
     
-    def get(self, request):
+    def list(self, request):
         """Displays user's cart"""
         user = request.user
         user_cart = models.Cart.objects.get(user=user)
         # CartItemSerializer
-        serializer = self.serializer_class(user_cart)
+        serializer = CartSerializer(user_cart)
         products = serializer.data['products']
         products = models.CartItem.objects.filter(pk__in=products)
-        serializer = CartItemSerializer(products, many=True)
+        serializer = self.serializer_class(products, many=True)
         user_cart = {}
-        counter = 1
+        
         for product in products:
-            print(product)
+            
             serializer = ProductSerializer(product.product)
-            user_cart[f'cart item {counter}'] = {'product': serializer.data,
+            user_cart[f'cart id {product.id}'] = {'product': serializer.data,
                                                  'quantity': product.quantity}
-            counter += 1
+            
         
         return Response(user_cart)
+    
+    def create(self, request):
+        """Allows user to post user cart items"""
+        user = request.user
+        
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            recent_cart_item = serializer.save()
+            user_cart = models.Cart.objects.get(user=user)
+            user_cart.products.add(recent_cart_item)
+            return Response({"message": "Cart item added successfully!"}, status=status.HTTP_200_OK)
+        else:
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+
+
+class OrderItemViewset(viewsets.ModelViewSet):
+    """Users can see their list of orders items """
+    serializer_class = OrderItemSerializer
+    queryset = models.OrderItem.objects.all()
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.UpdateOwnCart,]
+    http_method_names = ['get', 'post', 'delete']
+    
+
+
+class OrderViewset(viewsets.ModelViewSet):
+    """Users can see their list of orders """
+    serializer_class = OrderSerializer
+    queryset = models.Order.objects.all()
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.UpdateOwnCart,]
+    http_method_names = ['get', 'post', 'delete']
+    
+    def list(self, request):
+        """Display user's list of orders"""
+        user = request.user
+        user_order_list = models.OrderList.objects.get(user=user)
+        serializer = OrderListSerializer(user_order_list)
+        print(serializer.data["order_list"])
+        orders = serializer.data["order_list"]
+        order = models.Order.objects.filter(pk__in=orders)
+        serializer = OrderSerializer(order, many=True)
+        
+        
+        return Response(serializer.data)
 
 class OrderListView(APIView):
     """Users can see their list of orders """
@@ -200,6 +252,7 @@ class OrderListView(APIView):
     queryset = models.OrderList.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [IsAuthenticated]
+    
     
     def get(self, request):
         """Display user's list of orders"""

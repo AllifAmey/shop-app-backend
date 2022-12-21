@@ -24,7 +24,9 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.permissions import IsAuthenticated
 from shop import permissions
 from shop import models
-
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, inline_serializer
+from drf_spectacular.types import OpenApiTypes
+from rest_framework import serializers
 
 
 class ListProductView(generics.ListAPIView):
@@ -267,4 +269,26 @@ class OrderListView(APIView):
         
         return Response(serializer.data)
     
-
+class MassDeleteAPIView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    @extend_schema(request=inline_serializer(name="Mass delete",fields={
+        "object_type": serializers.CharField(), 
+        "ids": serializers.ListField(
+            child=serializers.IntegerField(min_value=1))
+        }),responses={
+            '2XX': inline_serializer(name='Success', fields={"message": serializers.CharField()})
+        })
+    def post(self,request):
+        """Deletes objects on mass"""
+        
+        object_type = request.data.get("object_type")
+        ids = request.data.get("ids")
+        
+        if object_type == "cart":
+            cart_items = models.CartItem.objects.filter(pk__in=ids)
+            cart_items.delete()
+            
+        
+        return Response({"Message": "Items successfully deleted"})

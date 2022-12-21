@@ -20,7 +20,7 @@ router.register('individual_order', views.OrderItemViewset, basename="user order
 
 urlpatterns = [
     path('products/', views.ListProductView.as_view(), name='products'),
-   
     path('user/orders/', views.OrderListView.as_view(), name='user list of orders'),
+    path('user/mass_delete', views.MassDeleteAPIView.as_view(), name='Deletes objects on mass'),
     path('', include(router.urls))
 ]

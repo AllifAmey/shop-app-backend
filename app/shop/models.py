@@ -3,7 +3,7 @@ Models for the shop
 """
 from django.db import models
 from django.conf import settings
-
+from django.core.validators import RegexValidator
 """
 Model name:
 Product
@@ -67,11 +67,14 @@ class Cart(models.Model):
 
 
 class OrderItem(models.Model):
-    """Individual product ordered by the User"""
+    """Individual product ordered by the User/anonymous user"""
     user = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
-		on_delete=models.CASCADE
+		on_delete=models.CASCADE,
+        blank=True,
+        null=True
 		)
+    email = models.EmailField(max_length=255, blank=True, null=True)
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE
@@ -84,15 +87,43 @@ class OrderItem(models.Model):
     
     def __str__(self):
          """Return the model as a string"""
-         return f'{self.user} ordered {self.product} {self.quantity} times at {self.date_ordered}'
+         return f'{self.email if self.user == None else self.user} ordered {self.product} {self.quantity} times at {self.date_ordered}'
+     
+class UserDeliveryInfo(models.Model):
+    """User info to help delivering items"""
+    # email is not optional here but user is. Anonymous orders dont need users
+    # anonymous orders need emails and every order does by default to establish,
+    # to connect the data to the database.
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+    first_name= models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
+    email = models.EmailField(max_length=255)
+    phone_number = models.CharField(max_length=255)
+    address = models.TextField()
+    city = models.CharField(max_length=255)
+    country = models.CharField(max_length=255)
+    post_code = models.CharField(max_length=255)
+    delivery_type = models.CharField(max_length=255)
+    
+    def __str__(self):
+        """Return the model as a string"""
+        return f'{self.email if self.user == None else self.user}\'s User Delivery Info'
 
 class Order(models.Model):
-    """Orders for each user"""
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    """Orders for each user/anonymous user"""
+    # for future referance user and email are both optional when creating an order.
+    # users 
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+    email = models.EmailField(max_length=255, blank=True, null=True)
     order = models.ManyToManyField(
         OrderItem,
-        
     )
+    personal_info_used = models.OneToOneField(
+        UserDeliveryInfo,
+        on_delete=models.CASCADE,
+        null=True
+    )
+    delivery_instructions = models.TextField(null=True, blank=True)
     delivery_status = models.CharField(max_length=255, blank=True, default="Processing Order")
     date_ordered = models.DateField(
         auto_now=True
@@ -102,13 +133,13 @@ class Order(models.Model):
     
     def __str__(self):
         """Return the model as a string"""
-        return f'{self.user}\'s order posted at {self.date_ordered} with delivery status of {self.delivery_status}'
+        return f'{self.email if self.user == None else self.user}\'s order posted at {self.date_ordered} with delivery status of {self.delivery_status}'
     
 class OrderList(models.Model):
     "Complete list of Orders for each User"
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
-		on_delete=models.CASCADE
+		on_delete=models.CASCADE,
     )
     order_list = models.ManyToManyField(
         Order,
@@ -118,3 +149,23 @@ class OrderList(models.Model):
         """Return the model as a string"""
         return f'{self.user}\'s list of orders'
     
+
+class DefaultUserDeliveryInfo(models.Model):
+    """Default User info for delivering items"""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+        blank=True,
+        null=True
+    )
+    
+    default_info = models.OneToOneField(
+        UserDeliveryInfo,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+    def __str__(self):
+        """Return the model as a string"""
+        return f'{self.user}\'s default User Delivery Info'
+

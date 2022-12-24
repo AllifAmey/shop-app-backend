@@ -15,6 +15,7 @@ from shop.serializers import (
     OrderSerializer,
     OrderItemSerializer,
     OrderListSerializer,
+    UserDeliveryInfoSerializer
 )
 from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import get_object_or_404
@@ -24,8 +25,7 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.permissions import IsAuthenticated
 from shop import permissions
 from shop import models
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, inline_serializer
-from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, inline_serializer, PolymorphicProxySerializer
 from rest_framework import serializers
 
 
@@ -66,107 +66,6 @@ class ListCartView(viewsets.ModelViewSet):
         print(serializer.data[0]['id'])
         
         return Response({'id':serializer.data[0]['id'],'products': products} )
-
-
-#Order and delivery APIView
-"""
-class RetrievePostOrderView(APIView):
-    \"""Retrieves the order to the shop the user made and allows posting orders\"""
-    serializer_class = OrderSerializer
-    queryset = models.Order.objects.all()
-    renderer_classes = [JSONRenderer]
-    authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        \"""Returns the list of products in the user's order\"""
-        
-        queryset_order = models.Order.objects.filter(user=request.user)
-        
-        #queryset_delivery = models.Delivery.objects.filter(user=request.user)
-        
-        # checks if user has orders else return no orders
-        if queryset_order:
-            
-            entire_order = {'orders': []}
-       
-            for order_obj in queryset_order:
-                delivery_obj = models.Delivery.objects.get(order=order_obj)
-                serializer = DeliverySerializer(delivery_obj)
-                order_serialized = self.serializer_class(order_obj)
-                products = order_serialized.data['products']
-                user_cart_products = models.Product.objects.filter(pk__in=products)
-                products_serialized = ProductSerializer(user_cart_products, many=True)
-                
-                individual_order = {
-                    'order' : products_serialized.data,
-                    'delivery status': serializer.data['delivery_status']}
-                
-                entire_order['orders'].append(individual_order)
-            
-            return Response(entire_order, status=status.HTTP_200_OK)
-        else:
-            error_msg = {"You have no orders"}
-            return Response(error_msg , status=status.HTTP_404_NOT_FOUND)
-
-       
-    
-    def post(self, request):
-        \"""Edits the order upon successful transaction\"""
-        user_cart = models.Cart.objects.get(user=request.user)
-        
-        serializer = CartSerializer(user_cart)
-       
-        products = serializer.data['products']
-        
-        if products == []:
-            print(user_cart)
-            error_msg = {"You can't make a order with no products in your cart."}
-            return Response(error_msg , status=status.HTTP_404_NOT_FOUND)
-        
-        else:
-            user_cart_products = models.Product.objects.filter(pk__in=products)
-            products_serialized = ProductSerializer(user_cart_products, many=True)
-            new_order = models.Order.objects.create(user=request.user)
-            new_order.products.set(products)
-            new_delivery_msg = models.Delivery.objects.create(order=new_order, delivery_status="")
-            delivery_serialized = DeliverySerializer(new_delivery_msg)
-            user_cart.products.set('') 
-            user_cart.save()
-            
-         
-            success_msg = {"You have successfully placed an order"}
-            return Response({
-                'message': success_msg, 
-                'products ordered': products_serialized.data, 
-                'delivery status': delivery_serialized.data}, status=status.HTTP_201_CREATED)
-"""            
-            
-        
-        
-"""
-class RetrieveDeliveryView(APIView):
-    \"""Retrieves the delivery status of the user's order\"""
-    serializer_class = DeliverySerializer
-    queryset = models.Delivery.objects.all()
-    renderer_classes = [JSONRenderer]
-    authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        \"""Allows the delivery status to be edited by admin\"""
-        user = request.user
-        
-        if user.is_staff:
-            serializer = DeliverySerializer(data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            error_msg = {"You are not authorised to edit other user's delivery status"}
-            return Response(error_msg, status=status.HTTP_403_FORBIDDEN)
-"""
         
 # new apis involving the new models
 
@@ -269,11 +168,14 @@ class OrderListView(APIView):
         
         return Response(serializer.data)
     
+
+    
 class MassDeleteAPIView(APIView):
+    """Allows the deletion of different objects on mass"""
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [IsAuthenticated]
     
-    @extend_schema(request=inline_serializer(name="Mass delete",fields={
+    @extend_schema(request=inline_serializer(name="Mass_delete",fields={
         "object_type": serializers.CharField(), 
         "ids": serializers.ListField(
             child=serializers.IntegerField(min_value=1))
@@ -283,12 +185,189 @@ class MassDeleteAPIView(APIView):
     def post(self,request):
         """Deletes objects on mass"""
         
+        user = request.user
         object_type = request.data.get("object_type")
         ids = request.data.get("ids")
         
         if object_type == "cart":
+            # TODO: check addition things such as whether those ids listed are related to the user.
             cart_items = models.CartItem.objects.filter(pk__in=ids)
+            print(user)
             cart_items.delete()
             
         
         return Response({"Message": "Items successfully deleted"})
+
+class UserDeliveryInfoViewset(viewsets.ModelViewSet):
+    """Users can see their list of orders items """
+    serializer_class = UserDeliveryInfoSerializer
+    queryset = models.UserDeliveryInfo.objects.all()
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.UpdateOwnCart,]
+    http_method_names = ['get', 'post', 'patch','delete']
+    
+    
+    @extend_schema(
+    request=PolymorphicProxySerializer(
+        component_name='user_delivery_info',
+        serializers=[
+            UserDeliveryInfoSerializer, inline_serializer(name="user_orders",fields={
+                "delivery_msg": serializers.CharField(allow_blank=True), 
+                "total_price": serializers.DecimalField(max_digits=5, decimal_places=2), 
+        }),
+        ],
+        resource_type_field_name='type',
+        many=True
+    ),
+    responses={
+            '2XX': inline_serializer(name='Order_success', fields={"message": serializers.CharField()})
+        }
+    )
+    def create(self, request):
+        """Create delivery info and order"""
+        user_exist = "Don't know"
+        
+        #establish if anonymous user.
+        try:
+            user = request.user
+            user_exist = True
+        except:
+            user_exist = False
+            
+        # process the data and check if user inputted right data
+        serializer = self.serializer_class(data=request.data[0])
+        if serializer.is_valid():
+            #create the deliveryInfo
+            #new_deliveryInfo = serializer.save()
+            #create the order items by grabbing the user's cart
+            user_cart = "empty"
+            if user_exist:
+                user_cart = models.Cart.objects.get(user=user)
+            
+            serializer = CartSerializer(user_cart)
+            
+            user_cart_cartItems = serializer.data['products']
+            store_orders = []
+            for cartItem in user_cart_cartItems:
+                single_cartItem = models.CartItem.objects.get(id=cartItem)
+                serializer = CartItemSerializer(single_cartItem)
+                product = serializer.data['product']
+                quantity = serializer.data['quantity']
+                email = request.data[0]['email']
+                serializer = OrderItemSerializer(data={"user":user.id,"email":email,"product":product, "quantity":quantity})
+                if serializer.is_valid():
+                    new_OrderItem = serializer.save()
+                    store_orders.append(new_OrderItem.id)
+                else:
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+            
+            #here is where the order
+            email = request.data[0]['email']
+            serializer = self.serializer_class(data=request.data[0])
+            new_delivery_info = None
+            if serializer.is_valid():
+                new_delivery_info = serializer.save()
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            serializer = OrderSerializer(data={"user": user.id, 
+                                               "email": email, 
+                                               "personal_info_used":new_delivery_info.id,
+                                               "order": store_orders,
+                                               "delivery_instructions": request.data[1]["delivery_msg"],
+                                               "total_price": request.data[1]["total_price"]})
+            if serializer.is_valid():
+                # lastly attach the user's order to the order list so they can view it and all the necessary information
+                
+                new_order = serializer.save()
+                
+                if serializer.is_valid():
+                    print("hello")
+                    old_OrderList = models.OrderList.objects.get(user=user)
+                    old_OrderList.order_list.add(new_order)
+                    # now the order is added, delete the cart items.                 
+                    print(user)
+                    old_cartItems = models.CartItem.objects.filter(user=user)
+                    
+                    
+                    old_cartItems.delete()
+                else:
+                    print(serializer.errors)
+                    print("there's an error")
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({"message": "order is valid"},  status=status.HTTP_200_OK)
+        else:
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+class PostOrderAnonymousAPIView(APIView):
+    """Allows users to post orders anonymously"""
+    serializer_class = UserDeliveryInfoSerializer
+    
+    @extend_schema(
+    request=PolymorphicProxySerializer(
+        component_name='user_delivery_info_anonymous',
+        serializers=[
+            UserDeliveryInfoSerializer, inline_serializer(name="user_orders_anonymous",fields={
+                "delivery_msg": serializers.CharField(allow_blank=True), 
+                "total_price": serializers.DecimalField(max_digits=5, decimal_places=2), 
+        }),inline_serializer(name="user_cart",fields={
+            "products": serializers.ListField(child=inline_serializer(name="user_items_anonymous",fields={
+                "product_ids": serializers.IntegerField(min_value=1), 
+                "quantity": serializers.IntegerField(min_value=1), }))
+        })  
+        ],
+        resource_type_field_name='type',
+        many=True
+    ),
+    responses={
+            '2XX': inline_serializer(name='Order_success', fields={"message": serializers.CharField()})
+        }
+    )
+    def post(self,request):
+        """Post orders anonymously."""
+        
+        email = request.data[0]['email']
+        user_cartItems = request.data[2]['products']
+        serializer = self.serializer_class(data=request.data[0])
+        if serializer.is_valid():
+            # now that the delivery info is valid
+            # create the orderitems and attach the email to it.
+            # this is so that if the user gives us a email to complain of orders
+            # we can look at their email to see what orders are attached to it.
+            store_orders = []
+            for cartItem in user_cartItems:
+                product = cartItem['product_id']
+                quantity = cartItem['quantity']
+                serializer = OrderItemSerializer(data={"email":email,"product":product, "quantity":quantity})
+                if serializer.is_valid():
+                    new_orderItem = serializer.save()
+                    store_orders.append(new_orderItem.id)
+                else:
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            serializer = self.serializer_class(data=request.data[0])
+            if serializer.is_valid():
+                new_delivery_info = serializer.save()
+                serializer = OrderSerializer(data={
+                                                "email": email, 
+                                                "personal_info_used":new_delivery_info.id,
+                                                "order": store_orders,
+                                                "delivery_instructions": request.data[1]["delivery_msg"],
+                                                "total_price": request.data[1]["total_price"]})
+                if serializer.is_valid():
+                    
+                    serializer.save()
+                    return Response({"message": "Order Successful"})
+                else:
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({"message": "hello"})    
+    

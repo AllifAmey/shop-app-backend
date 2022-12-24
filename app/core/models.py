@@ -9,7 +9,7 @@ from django.contrib.auth.models import (
     PermissionsMixin
 )
 
-from shop.models import Cart, OrderList
+from shop.models import Cart, OrderList, DefaultUserDeliveryInfo
 
 class UserManager(BaseUserManager):
     """Manager for users."""
@@ -24,6 +24,7 @@ class UserManager(BaseUserManager):
         # default models added to user upon creation of user.
         Cart.objects.create(user=user)
         OrderList.objects.create(user=user)
+        DefaultUserDeliveryInfo.objects.create(user=user)
         
         return user
     

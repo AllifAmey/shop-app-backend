@@ -37,5 +37,8 @@ class ManageUserView(generics.RetrieveUpdateAPIView):
         name = request.user.name
         email = request.user.email
         user_id = request.user.id
+        user_status = "member"
+        if (request.user.is_staff):
+            user_status = "staff" 
         
-        return Response({"name": name, "email": email, "user_id": user_id})
+        return Response({"name": name, "email": email, "user_id": user_id, "user_status": user_status})

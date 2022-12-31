@@ -9,7 +9,7 @@ class ProductSerializer(serializers.ModelSerializer):
     """Serializes Product Model"""
     class Meta:
         model = models.Product
-        fields = ['id', 'name', 'image_url', 'price', 'description_short', 'description_long']
+        fields = ['id', 'name', 'image_url', 'price', 'description_short', 'description_long', 'catagory']
 
 class CartItemSerializer(serializers.ModelSerializer):
     """Serializes the Cart Item Model"""

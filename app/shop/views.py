@@ -22,20 +22,48 @@ from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.renderers import JSONRenderer
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from shop import permissions
 from shop import models
 from drf_spectacular.utils import extend_schema, inline_serializer, PolymorphicProxySerializer
 from rest_framework import serializers
+from rest_framework.decorators import permission_classes, api_view, authentication_classes
 
 
-class ListProductView(generics.ListAPIView):
+
+
+class ListProductViewset(viewsets.ModelViewSet):
     """List the products available at the shop"""
     serializer_class = ProductSerializer
     queryset = models.Product.objects.all()
     renderer_classes = [JSONRenderer]
-   
-#viewsets.ModelViewSet
+    http_method_names = ['get']
+
+class CreateProduct(APIView):
+    """Create product if staff"""
+    serializer_class = ProductSerializer
+    queryset = models.Product.objects.all()
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Create product"""
+        # for some odd reason this logic works here but not in ListProductViewset
+        
+        user = request.user
+        print(user)
+        if user.is_staff:
+            serializer = ProductSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"Message": "serializer works"})
+            else:
+                return Response(serializer.errors)
+            
+        else:
+            
+            return Response({"message": "You are not authorised."}, status=status.HTTP_401_UNAUTHORIZED)
+
 
 class ListCartView(viewsets.ModelViewSet):
     """List items in shopping cart for user and allows user to edit shopping cart"""
@@ -108,7 +136,8 @@ class CartItemViewset(viewsets.ModelViewSet):
             recent_cart_item = serializer.save()
             user_cart = models.Cart.objects.get(user=user)
             user_cart.products.add(recent_cart_item)
-            return Response({"message": "Cart item added successfully!"}, status=status.HTTP_200_OK)
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
         else:
             
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -137,12 +166,65 @@ class OrderViewset(viewsets.ModelViewSet):
     def list(self, request):
         """Display user's list of orders"""
         user = request.user
+        if user.is_staff:
+            # if staff return all orders in the data base.
+            # maybe change the logic in the future if the amount of orders , 
+            # is too much for servers.
+            serializer = self.serializer_class(self.queryset, many=True)
+            for order in serializer.data:
+                order_item = models.OrderItem.objects.filter(pk__in=order["order"])
+                order_item_serializer = OrderItemSerializer(order_item, many=True)
+                order_item_list = []
+                for order_item_model in order_item_serializer.data:
+                    product_id = order_item_model["product"]
+                    product = models.Product.objects.get(id=product_id)
+                    product_serializer = ProductSerializer(product)
+                    quantity = order_item_model["quantity"]
+                    order_item_obj = {
+                        "product": product_serializer.data,
+                        "quantity" : quantity
+                    }
+                    order_item_list.append(order_item_obj)
+                order.update({"order": order_item_list})
+            return Response(serializer.data)
+            
+            
         user_order_list = models.OrderList.objects.get(user=user)
         serializer = OrderListSerializer(user_order_list)
-        print(serializer.data["order_list"])
         orders = serializer.data["order_list"]
         order = models.Order.objects.filter(pk__in=orders)
         serializer = OrderSerializer(order, many=True)
+        for order in serializer.data:
+            print(order["order"])
+            order_item = models.OrderItem.objects.filter(pk__in=order["order"])
+            order_item_serializer = OrderItemSerializer(order_item, many=True)
+            order_item_list = []
+            for order_item_model in order_item_serializer.data:
+                product_id = order_item_model["product"]
+                product = models.Product.objects.get(id=product_id)
+                product_serializer = ProductSerializer(product)
+                quantity = order_item_model["quantity"]
+                order_item_obj = {
+                    "product": product_serializer.data,
+                    "quantity" : quantity
+                }
+                order_item_list.append(order_item_obj)
+            order.update({"order": order_item_list})
+        """
+        {
+            "id": 20,
+            "user": 2,
+            "email": "allifamey487@gmail.com",
+            "order": [
+            26
+            ],
+            "personal_info_used": 25,
+            "delivery_instructions": "awefawefawef",
+            "delivery_status": "Processing Order",
+            "date_ordered": "2022-12-24",
+            "total_price": "5.99"
+        },
+        """
         
         
         return Response(serializer.data)
@@ -283,7 +365,6 @@ class UserDeliveryInfoViewset(viewsets.ModelViewSet):
                 new_order = serializer.save()
                 
                 if serializer.is_valid():
-                    print("hello")
                     old_OrderList = models.OrderList.objects.get(user=user)
                     old_OrderList.order_list.add(new_order)
                     # now the order is added, delete the cart items.                 

@@ -26,6 +26,7 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=5, decimal_places=2)
     description_short = models.TextField()
     description_long = models.TextField()
+    catagory = models.CharField(max_length=255, default="Ring")
 
     def __str__(self):
         """Return the model as a string"""

@@ -22,7 +22,7 @@ python manage.py sqlsequencereset myapp1 myapp2 myapp3
 class Product(models.Model):
     """individual product in the shop"""
     name = models.CharField(max_length=255)
-    image_url = models.URLField(max_length=255)
+    image_url = models.URLField(max_length=1000)
     price = models.DecimalField(max_digits=5, decimal_places=2)
     description_short = models.TextField()
     description_long = models.TextField()

@@ -23,7 +23,8 @@ from shop import models
 from drf_spectacular.utils import extend_schema,\
     inline_serializer, PolymorphicProxySerializer
 from rest_framework import serializers
-import datetime
+from django.db.models import Sum, Count
+from django.db.models.functions import ExtractMonth
 
 
 class DataAnalysisShopAPIView(APIView):
@@ -62,64 +63,70 @@ class DataAnalysisShopAPIView(APIView):
                            {"month": "Dec",
                             "sale": 0},
                            ]
-        sales = self.get_queryset()
-        sales_values = sales.values_list('total_price', 'date_ordered')
 
-        for sale in sales_values:
-            date = datetime.datetime.strptime(str(sale[1]), "%Y-%m-%d")
-            sales_per_month_idx = date.month-1
-            current_sale = sales_per_month[sales_per_month_idx]
-            key = list(current_sale)[1]
-            new_sale = current_sale[key] + sale[0]
-            current_sale.update({key: new_sale})
-            sales_per_month[sales_per_month_idx] = current_sale
+        """
+        Problem with current solution:
 
-        store_all_products = []
-        for sale in sales:
-            order_item = sale.order
-            serializer = OrderItemSerializer(order_item, many=True)
-            for order_item in serializer.data:
-                store_all_products.append(order_item['product'])
+        Product Popularity Algorithm problem -
+        I keep looping over the same queryset when I could
+        get my answer in 2 operations 0(2)
+        Current logic:
+        Loop over order models in database ( imagine 1000x )
+        Then perform python's max function o(n^2)
+        Extremely inefficient
 
-        store_recorded_products = []
+        Solution:
+        most_popular = models.Product.objects\
+            .annotate(num_orderItem=Count('orderitem'))\
+                .order_by("-num_orderItem")[0]
+        least_popular = models.Product.objects\
+            .annotate(num_orderItem=Count('orderitem'))\
+                .order_by("num_orderItem")[0]
+        count_most = models.OrderItem.objects\
+            .filter(product=most_popular).count()
+        count_most = models.OrderItem.objects\
+            .filter(product=least_popular).count()
+        4 queries. 0(4) Much more efficient long term.
 
-        for product in set(store_all_products):
-            occurance = store_all_products.count(product)
-            store_recorded_products.append(
-                {'product': product,
-                 'occurance': occurance}
-                )
+        Problem with current solution:
 
-        mostPopularProduct = max(
-            store_recorded_products,
-            key=lambda x: x['occurance']
-            )
-        leastPopularProduct = min(
-            store_recorded_products,
-            key=lambda x: x['occurance']
-            )
+        Sales for each month algorithim problem -
+        I keep looping over the query set and many operations on each loop
+        Overtime as the application scales the operation would be 0(n^2)
+        Imagine 1000x rows
+        In theory I could probably do 12 queries.
 
-        mostPopularProductModel = models.Product.objects.get(
-            id=mostPopularProduct['product']
-            )
-        leastPopularProductModel = models.Product.objects.get(
-            id=leastPopularProduct['product']
-            )
-
+        Solution:
+        models.Order.objects.annotate(month=ExtractMonth('date_ordered'))
+        .values('month').annotate(total_sales=Sum('total_price'))
+        """
+        monthly_sales = models.Order.objects.annotate(
+            month=ExtractMonth('date_ordered'))\
+            .values('month').annotate(total_sales=Sum('total_price'))
+        for sale in monthly_sales:
+            sales_per_month[sale['month']-1]['sale'] = sale['total_sales']
+        most_popular = models.Product.objects.annotate(
+            num_orderItem=Count('orderitem')).order_by("-num_orderItem")[0]
+        least_popular = models.Product.objects.annotate(
+            num_orderItem=Count('orderitem')).order_by("num_orderItem")[0]
+        count_most = models.OrderItem.objects.filter(
+            product=most_popular).count()
+        count_least = models.OrderItem.objects.filter(
+            product=least_popular).count()
         serializer_most_popular_product = ProductSerializer(
-            leastPopularProductModel
+            most_popular
             )
         serializer_least_popular_product = ProductSerializer(
-            mostPopularProductModel
+            least_popular
             )
 
         most_popular_data = {
             'most_popular': serializer_most_popular_product.data,
-            'occurance': mostPopularProduct['occurance']
+            'occurance': count_most
             }
         least_popular_data = {
             'least_popular': serializer_least_popular_product.data,
-            'occurance': leastPopularProduct['occurance']
+            'occurance': count_least
             }
 
         popularity_metric = [most_popular_data, least_popular_data]
@@ -162,6 +169,7 @@ class DestroyProductViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_204_NO_CONTENT
                 )
         else:
+            # scare off the hackers
             return Response(
                 {"Message": "You will be reported to the police if you try"},
                 status=status.HTTP_403_FORBIDDEN

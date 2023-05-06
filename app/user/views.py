@@ -32,13 +32,14 @@ class ManageUserView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         """Retrieve and return the authenticated user."""
         return self.request.user
-    
+
     def get(self, request):
+        """Retrieve user model"""
         name = request.user.name
         email = request.user.email
         user_id = request.user.id
         user_status = "member"
         if (request.user.is_staff):
-            user_status = "staff" 
-        
-        return Response({"name": name, "email": email, "user_id": user_id, "user_status": user_status})
+            user_status = "staff"
+        return Response({"name": name, "email": email,
+                        "user_id": user_id, "user_status": user_status})

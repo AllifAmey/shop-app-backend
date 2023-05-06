@@ -2,12 +2,9 @@
 Views for the shop API
 """
 
-from rest_framework import generics, authentication
+from rest_framework import authentication
 from rest_framework import viewsets
 from rest_framework.views import APIView
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework import filters
-from shop import models
 from shop.serializers import (
     ProductSerializer,
     CartSerializer,
@@ -17,19 +14,118 @@ from shop.serializers import (
     OrderListSerializer,
     UserDeliveryInfoSerializer
 )
-from django.core.exceptions import ObjectDoesNotExist
-from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.renderers import JSONRenderer
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from shop import permissions
 from shop import models
-from drf_spectacular.utils import extend_schema, inline_serializer, PolymorphicProxySerializer
+from drf_spectacular.utils import extend_schema,\
+    inline_serializer, PolymorphicProxySerializer
 from rest_framework import serializers
-from rest_framework.decorators import permission_classes, api_view, authentication_classes
+import datetime
 
 
+class DataAnalysisShopAPIView(APIView):
+    """Analysis of the backend data and returns result"""
+    queryset = models.Order.objects.all()
+    renderer_classes = [JSONRenderer]
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return models.Order.objects.all()
+
+    def get(self, request):
+        sales_per_month = [{"month": "Jan",
+                            "sale": 0},
+                           {"month": "Feb",
+                            "sale": 0},
+                           {"month": "Mar",
+                            "sale": 0},
+                           {"month": "Apr",
+                            "sale": 0},
+                           {"month": "May",
+                            "sale": 0},
+                           {"month": "Jun",
+                            "sale": 0},
+                           {"month": "Jul",
+                            "sale": 0},
+                           {"month": "Aug",
+                            "sale": 0},
+                           {"month": "Sep",
+                            "sale": 0},
+                           {"month": "Oct",
+                            "sale": 0},
+                           {"month": "Nov",
+                            "sale": 0},
+                           {"month": "Dec",
+                            "sale": 0},
+                           ]
+        sales = self.get_queryset()
+        sales_values = sales.values_list('total_price', 'date_ordered')
+
+        for sale in sales_values:
+            date = datetime.datetime.strptime(str(sale[1]), "%Y-%m-%d")
+            sales_per_month_idx = date.month-1
+            current_sale = sales_per_month[sales_per_month_idx]
+            key = list(current_sale)[1]
+            new_sale = current_sale[key] + sale[0]
+            current_sale.update({key: new_sale})
+            sales_per_month[sales_per_month_idx] = current_sale
+
+        store_all_products = []
+        for sale in sales:
+            order_item = sale.order
+            serializer = OrderItemSerializer(order_item, many=True)
+            for order_item in serializer.data:
+                store_all_products.append(order_item['product'])
+
+        store_recorded_products = []
+
+        for product in set(store_all_products):
+            occurance = store_all_products.count(product)
+            store_recorded_products.append(
+                {'product': product,
+                 'occurance': occurance}
+                )
+
+        mostPopularProduct = max(
+            store_recorded_products,
+            key=lambda x: x['occurance']
+            )
+        leastPopularProduct = min(
+            store_recorded_products,
+            key=lambda x: x['occurance']
+            )
+
+        mostPopularProductModel = models.Product.objects.get(
+            id=mostPopularProduct['product']
+            )
+        leastPopularProductModel = models.Product.objects.get(
+            id=leastPopularProduct['product']
+            )
+
+        serializer_most_popular_product = ProductSerializer(
+            leastPopularProductModel
+            )
+        serializer_least_popular_product = ProductSerializer(
+            mostPopularProductModel
+            )
+
+        most_popular_data = {
+            'most_popular': serializer_most_popular_product.data,
+            'occurance': mostPopularProduct['occurance']
+            }
+        least_popular_data = {
+            'least_popular': serializer_least_popular_product.data,
+            'occurance': leastPopularProduct['occurance']
+            }
+
+        popularity_metric = [most_popular_data, least_popular_data]
+
+        return Response({"sales_per_month": sales_per_month,
+                         'popularity_metric': popularity_metric})
 
 
 class ListProductViewset(viewsets.ModelViewSet):
@@ -39,66 +135,105 @@ class ListProductViewset(viewsets.ModelViewSet):
     renderer_classes = [JSONRenderer]
     http_method_names = ['get']
 
+    def get_queryset(self):
+        return models.Product.objects.all()
+
+    def list(self, request):
+        products = self.get_queryset().order_by("id")
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data)
+
+
+class DestroyProductViewSet(viewsets.ModelViewSet):
+    """Allows admin to destroy products"""
+    serializer_class = ProductSerializer
+    queryset = models.Product.objects.all()
+    renderer_classes = [JSONRenderer]
+    http_method_names = ['delete']
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def destroy(self, request, pk):
+        if request.user.is_staff:
+            product = models.Product.objects.get(id=pk)
+            product.delete()
+            return Response(
+                {"Message": "Successful deletion"},
+                status=status.HTTP_204_NO_CONTENT
+                )
+        else:
+            return Response(
+                {"Message": "You will be reported to the police if you try"},
+                status=status.HTTP_403_FORBIDDEN
+                )
+
+
 class CreateProduct(APIView):
     """Create product if staff"""
     serializer_class = ProductSerializer
     queryset = models.Product.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
         """Create product"""
-        # for some odd reason this logic works here but not in ListProductViewset
-        
+        # for some odd reason this logic works here
+        # but not in ListProductViewset
+
         user = request.user
-        print(user)
         if user.is_staff:
             serializer = ProductSerializer(data=request.data)
             if serializer.is_valid():
                 serializer.save()
-                return Response({"Message": "serializer works"})
+                return Response(
+                    {"Message": "serializer works"},
+                    status=status.HTTP_201_CREATED
+                    )
             else:
-                return Response(serializer.errors)
-            
+                return Response(
+                    serializer.errors,
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
         else:
-            
-            return Response({"message": "You are not authorised."}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"message": "You are not authorised."},
+                status=status.HTTP_401_UNAUTHORIZED
+                )
 
 
 class ListCartView(viewsets.ModelViewSet):
-    """List items in shopping cart for user and allows user to edit shopping cart"""
+    """Users can view items in cart and edit cart"""
     serializer_class = CartSerializer
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = (permissions.UpdateOwnCart, )
     queryset = models.Cart.objects.all()
     http_method_names = ['get',  'patch']
     renderer_classes = [JSONRenderer]
-    
+
     def grab_product_from_cart(self, request):
         """This returns products from cart."""
         user_cart = models.Cart.objects.filter(user=request.user)
         serializer = self.serializer_class(user_cart, many=True)
         # maybe use the below for later, it just looks extremely weird.
-        #json = JSONRenderer().render(serializer.data)
+        # json = JSONRenderer().render(serializer.data)
         products = serializer.data[0]['products']
         user_cart_products = models.Product.objects.filter(pk__in=products)
         products_serialized = ProductSerializer(user_cart_products, many=True)
-        
+
         return products_serialized.data
-    
+
     def list(self, request):
         """Returns the list of products in the user's cart"""
         products = self.grab_product_from_cart(request)
         user_cart = models.Cart.objects.filter(user=request.user)
         serializer = self.serializer_class(user_cart, many=True)
-        print(serializer.data[0]['id'])
-        
-        return Response({'id':serializer.data[0]['id'],'products': products} )
-        
-# new apis involving the new models
 
+        return Response({'id': serializer.data[0]['id'], 'products': products})
+
+# new apis involving the new models
 # this is now the standard
 # TODO: Make sure when cart item is created attach to user - change post method
+
 
 class CartItemViewset(viewsets.ModelViewSet):
     """Users can create cart items"""
@@ -106,43 +241,49 @@ class CartItemViewset(viewsets.ModelViewSet):
     queryset = models.CartItem.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = (permissions.UpdateOwnCart, )
-    
+
     def list(self, request):
         """Displays user's cart"""
         user = request.user
         user_cart = models.Cart.objects.get(user=user)
         # CartItemSerializer
+        # TODO: Join a table then filter it.
         serializer = CartSerializer(user_cart)
         products = serializer.data['products']
         products = models.CartItem.objects.filter(pk__in=products)
         serializer = self.serializer_class(products, many=True)
-        user_cart = {}
-        
+        user_cart = []
+
         for product in products:
-            
+
             serializer = ProductSerializer(product.product)
-            user_cart[f'cart id {product.id}'] = {'product': serializer.data,
-                                                 'quantity': product.quantity}
-            
-        
+            user_cart.append({'cart_item_id': product.id,
+                              'product': serializer.data,
+                              'quantity': product.quantity,
+                              })
         return Response(user_cart)
-    
+
     def create(self, request):
         """Allows user to post user cart items"""
         user = request.user
-        
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             recent_cart_item = serializer.save()
             user_cart = models.Cart.objects.get(user=user)
             user_cart.products.add(recent_cart_item)
-            
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            product = models.Product.objects.get(
+                pk=recent_cart_item.product.pk
+                )
+            serializer = ProductSerializer(product)
+            res = {'cart_item_id': recent_cart_item.id,
+                   'product': serializer.data,
+                   'quantity': recent_cart_item.quantity}
+            return Response(res, status=status.HTTP_200_OK)
         else:
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+                )
 
 
 class OrderItemViewset(viewsets.ModelViewSet):
@@ -150,9 +291,8 @@ class OrderItemViewset(viewsets.ModelViewSet):
     serializer_class = OrderItemSerializer
     queryset = models.OrderItem.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [permissions.UpdateOwnCart,]
+    permission_classes = [permissions.UpdateOwnCart]
     http_method_names = ['get', 'post', 'delete']
-    
 
 
 class OrderViewset(viewsets.ModelViewSet):
@@ -160,20 +300,31 @@ class OrderViewset(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     queryset = models.Order.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [permissions.UpdateOwnCart,]
-    http_method_names = ['get', 'post', 'delete']
-    
+    permission_classes = [permissions.UpdateOwnOrder]
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    def get_queryset(self):
+        return models.Order.objects.all()
+
     def list(self, request):
         """Display user's list of orders"""
         user = request.user
         if user.is_staff:
             # if staff return all orders in the data base.
-            # maybe change the logic in the future if the amount of orders , 
+            # maybe change the logic in the future if the amount of orders ,
             # is too much for servers.
-            serializer = self.serializer_class(self.queryset, many=True)
+            serializer = self.serializer_class(
+                self.get_queryset().order_by("id"),
+                many=True
+                )
             for order in serializer.data:
-                order_item = models.OrderItem.objects.filter(pk__in=order["order"])
-                order_item_serializer = OrderItemSerializer(order_item, many=True)
+                order_item = models.OrderItem.objects.filter(
+                    pk__in=order["order"]
+                    )
+                order_item_serializer = OrderItemSerializer(
+                    order_item,
+                    many=True
+                    )
                 order_item_list = []
                 for order_item_model in order_item_serializer.data:
                     product_id = order_item_model["product"]
@@ -181,21 +332,25 @@ class OrderViewset(viewsets.ModelViewSet):
                     product_serializer = ProductSerializer(product)
                     quantity = order_item_model["quantity"]
                     order_item_obj = {
+                        "order_item_id": order_item_model["id"],
                         "product": product_serializer.data,
-                        "quantity" : quantity
+                        "quantity": quantity
                     }
                     order_item_list.append(order_item_obj)
                 order.update({"order": order_item_list})
+                personal_info_used = models.UserDeliveryInfo.objects.get(
+                    pk=order["personal_info_used"]
+                    )
+                Infoserializer = UserDeliveryInfoSerializer(personal_info_used)
+                order.update({"personal_info_used": Infoserializer.data})
             return Response(serializer.data)
-            
-            
+
         user_order_list = models.OrderList.objects.get(user=user)
         serializer = OrderListSerializer(user_order_list)
         orders = serializer.data["order_list"]
         order = models.Order.objects.filter(pk__in=orders)
         serializer = OrderSerializer(order, many=True)
         for order in serializer.data:
-            print(order["order"])
             order_item = models.OrderItem.objects.filter(pk__in=order["order"])
             order_item_serializer = OrderItemSerializer(order_item, many=True)
             order_item_list = []
@@ -206,10 +361,15 @@ class OrderViewset(viewsets.ModelViewSet):
                 quantity = order_item_model["quantity"]
                 order_item_obj = {
                     "product": product_serializer.data,
-                    "quantity" : quantity
+                    "quantity": quantity
                 }
                 order_item_list.append(order_item_obj)
             order.update({"order": order_item_list})
+            personal_info_used = models.UserDeliveryInfo.objects.get(
+                pk=order["personal_info_used"]
+                )
+            Infoserializer = UserDeliveryInfoSerializer(personal_info_used)
+            order.update({"personal_info_used": Infoserializer.data})
         """
         {
             "id": 20,
@@ -225,9 +385,8 @@ class OrderViewset(viewsets.ModelViewSet):
             "total_price": "5.99"
         },
         """
-        
-        
         return Response(serializer.data)
+
 
 class OrderListView(APIView):
     """Users can see their list of orders """
@@ -235,8 +394,7 @@ class OrderListView(APIView):
     queryset = models.OrderList.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [IsAuthenticated]
-    
-    
+
     def get(self, request):
         """Display user's list of orders"""
         user = request.user
@@ -246,88 +404,105 @@ class OrderListView(APIView):
         orders = serializer.data["order_list"]
         order = models.Order.objects.filter(pk__in=orders)
         serializer = OrderSerializer(order, many=True)
-        
-        
         return Response(serializer.data)
-    
 
-    
+
 class MassDeleteAPIView(APIView):
     """Allows the deletion of different objects on mass"""
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [IsAuthenticated]
-    
-    @extend_schema(request=inline_serializer(name="Mass_delete",fields={
-        "object_type": serializers.CharField(), 
-        "ids": serializers.ListField(
-            child=serializers.IntegerField(min_value=1))
-        }),responses={
-            '2XX': inline_serializer(name='Success', fields={"message": serializers.CharField()})
-        })
-    def post(self,request):
+
+    @extend_schema(
+        request=inline_serializer(
+            name="Mass_delete",
+            fields={
+                "object_type": serializers.CharField(),
+                "ids": serializers.ListField(
+                    child=serializers.IntegerField(min_value=1)
+                    )
+                }
+            ),
+        responses={
+            '2XX': inline_serializer(
+                name='Success',
+                fields={"message": serializers.CharField()}
+                )
+            }
+    )
+    def post(self, request):
         """Deletes objects on mass"""
-        
         user = request.user
         object_type = request.data.get("object_type")
         ids = request.data.get("ids")
-        
+
         if object_type == "cart":
-            # TODO: check addition things such as whether those ids listed are related to the user.
+            # TODO: check addition things
+            # such as whether those ids listed are related to the user.
             cart_items = models.CartItem.objects.filter(pk__in=ids)
             print(user)
             cart_items.delete()
-            
-        
         return Response({"Message": "Items successfully deleted"})
+
 
 class UserDeliveryInfoViewset(viewsets.ModelViewSet):
     """Users can see their list of orders items """
     serializer_class = UserDeliveryInfoSerializer
     queryset = models.UserDeliveryInfo.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [permissions.UpdateOwnCart,]
-    http_method_names = ['get', 'post', 'patch','delete']
-    
-    
+    permission_classes = [permissions.UpdateOwnCart]
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
     @extend_schema(
-    request=PolymorphicProxySerializer(
-        component_name='user_delivery_info',
-        serializers=[
-            UserDeliveryInfoSerializer, inline_serializer(name="user_orders",fields={
-                "delivery_msg": serializers.CharField(allow_blank=True), 
-                "total_price": serializers.DecimalField(max_digits=5, decimal_places=2), 
-        }),
-        ],
-        resource_type_field_name='type',
-        many=True
-    ),
-    responses={
-            '2XX': inline_serializer(name='Order_success', fields={"message": serializers.CharField()})
-        }
+        request=PolymorphicProxySerializer(
+            component_name='user_delivery_info',
+            serializers=[
+                UserDeliveryInfoSerializer,
+                inline_serializer(name="user_orders",
+                                  fields={
+                                      "delivery_msg":
+                                          serializers.CharField(
+                                              allow_blank=True
+                                              ),
+                                      "total_price":
+                                          serializers.DecimalField(
+                                              max_digits=5,
+                                              decimal_places=2
+                                              ),
+                                          }
+                                  ),
+                ],
+            resource_type_field_name='type',
+            many=True
+            ),
+        responses={
+            '2XX': inline_serializer(
+                name='Order_success',
+                fields={
+                    "message": serializers.CharField()
+                    }
+                )
+            }
     )
     def create(self, request):
         """Create delivery info and order"""
         user_exist = "Don't know"
-        
-        #establish if anonymous user.
+
+        # establish if anonymous user.
         try:
             user = request.user
             user_exist = True
         except:
             user_exist = False
-            
         # process the data and check if user inputted right data
         serializer = self.serializer_class(data=request.data[0])
         if serializer.is_valid():
-            #create the deliveryInfo
-            #new_deliveryInfo = serializer.save()
-            #create the order items by grabbing the user's cart
+            # create the deliveryInfo
+            # new_deliveryInfo = serializer.save()
+            # create the order items by grabbing the user's cart
             user_cart = "empty"
             if user_exist:
                 user_cart = models.Cart.objects.get(user=user)
-            
             serializer = CartSerializer(user_cart)
-            
             user_cart_cartItems = serializer.data['products']
             store_orders = []
             for cartItem in user_cart_cartItems:
@@ -336,119 +511,182 @@ class UserDeliveryInfoViewset(viewsets.ModelViewSet):
                 product = serializer.data['product']
                 quantity = serializer.data['quantity']
                 email = request.data[0]['email']
-                serializer = OrderItemSerializer(data={"user":user.id,"email":email,"product":product, "quantity":quantity})
+                serializer = OrderItemSerializer(
+                    data={
+                        "user": user.id,
+                        "email": email,
+                        "product": product,
+                        "quantity": quantity
+                        }
+                    )
                 if serializer.is_valid():
                     new_OrderItem = serializer.save()
                     store_orders.append(new_OrderItem.id)
                 else:
-                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-                
-            
-            #here is where the order
+                    return Response(
+                        serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST
+                        )
+            # here is where the order
             email = request.data[0]['email']
             serializer = self.serializer_class(data=request.data[0])
             new_delivery_info = None
             if serializer.is_valid():
                 new_delivery_info = serializer.save()
             else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
-            serializer = OrderSerializer(data={"user": user.id, 
-                                               "email": email, 
-                                               "personal_info_used":new_delivery_info.id,
-                                               "order": store_orders,
-                                               "delivery_instructions": request.data[1]["delivery_msg"],
-                                               "total_price": request.data[1]["total_price"]})
+                return Response(
+                    serializer.errors,
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            serializer = OrderSerializer(
+                data={
+                    "user": user.id,
+                    "email": email,
+                    "personal_info_used": new_delivery_info.id,
+                    "order": store_orders,
+                    "delivery_instructions": request.data[1]["delivery_msg"],
+                    "total_price": request.data[1]["total_price"]
+                    }
+                )
             if serializer.is_valid():
-                # lastly attach the user's order to the order list so they can view it and all the necessary information
-                
+                # lastly attach the user's order to the order list
+                # so they can view it and all the necessary information
                 new_order = serializer.save()
-                
                 if serializer.is_valid():
                     old_OrderList = models.OrderList.objects.get(user=user)
                     old_OrderList.order_list.add(new_order)
-                    # now the order is added, delete the cart items.                 
+                    # now the order is added, delete the cart items.
                     print(user)
                     old_cartItems = models.CartItem.objects.filter(user=user)
-                    
-                    
                     old_cartItems.delete()
                 else:
-                    print(serializer.errors)
-                    print("there's an error")
-                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST
+                        )
             else:
-                
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
-            return Response({"message": "order is valid"},  status=status.HTTP_200_OK)
+                return Response(
+                    serializer.errors,
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
+            return Response(
+                {"message": "order is valid"},
+                status=status.HTTP_200_OK
+                )
         else:
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+                )
+
+
 class PostOrderAnonymousAPIView(APIView):
     """Allows users to post orders anonymously"""
     serializer_class = UserDeliveryInfoSerializer
-    
+
     @extend_schema(
-    request=PolymorphicProxySerializer(
-        component_name='user_delivery_info_anonymous',
-        serializers=[
-            UserDeliveryInfoSerializer, inline_serializer(name="user_orders_anonymous",fields={
-                "delivery_msg": serializers.CharField(allow_blank=True), 
-                "total_price": serializers.DecimalField(max_digits=5, decimal_places=2), 
-        }),inline_serializer(name="user_cart",fields={
-            "products": serializers.ListField(child=inline_serializer(name="user_items_anonymous",fields={
-                "product_ids": serializers.IntegerField(min_value=1), 
-                "quantity": serializers.IntegerField(min_value=1), }))
-        })  
-        ],
-        resource_type_field_name='type',
-        many=True
-    ),
-    responses={
-            '2XX': inline_serializer(name='Order_success', fields={"message": serializers.CharField()})
-        }
+        request=PolymorphicProxySerializer(
+            component_name='user_delivery_info_anonymous',
+            serializers=[
+                UserDeliveryInfoSerializer,
+                inline_serializer(
+                    name="user_orders_anonymous",
+                    fields={
+                        "delivery_msg":
+                            serializers.CharField(allow_blank=True),
+                        "total_price": serializers.DecimalField(
+                            max_digits=5,
+                            decimal_places=2
+                            ),
+                        }
+                    ),
+                inline_serializer(
+                    name="user_cart",
+                    fields={
+                        "products": serializers.ListField(
+                            child=inline_serializer(
+                                name="user_items_anonymous",
+                                fields={
+                                    "product_ids":
+                                        serializers.IntegerField(min_value=1),
+                                    "quantity":
+                                        serializers.IntegerField(min_value=1),
+                                        }
+                                )
+                            )
+                        }
+                    )
+                ],
+            resource_type_field_name='type',
+            many=True,
+            ),
+        responses={
+            '2XX':
+                inline_serializer(
+                    name='Order_success',
+                    fields={
+                        "message":
+                            serializers.CharField()
+                            }
+                    )
+                }
     )
-    def post(self,request):
+    def post(self, request):
         """Post orders anonymously."""
-        
+
         email = request.data[0]['email']
         user_cartItems = request.data[2]['products']
         serializer = self.serializer_class(data=request.data[0])
         if serializer.is_valid():
             # now that the delivery info is valid
             # create the orderitems and attach the email to it.
-            # this is so that if the user gives us a email to complain of orders
-            # we can look at their email to see what orders are attached to it.
+            # a email is required so issues with their order can be heard
+            # email can be used to find their order.
             store_orders = []
             for cartItem in user_cartItems:
                 product = cartItem['product_id']
                 quantity = cartItem['quantity']
-                serializer = OrderItemSerializer(data={"email":email,"product":product, "quantity":quantity})
+                serializer = OrderItemSerializer(
+                    data={
+                        "email": email,
+                        "product": product,
+                        "quantity": quantity
+                        }
+                    )
                 if serializer.is_valid():
                     new_orderItem = serializer.save()
                     store_orders.append(new_orderItem.id)
                 else:
-                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST
+                        )
             serializer = self.serializer_class(data=request.data[0])
             if serializer.is_valid():
                 new_delivery_info = serializer.save()
-                serializer = OrderSerializer(data={
-                                                "email": email, 
-                                                "personal_info_used":new_delivery_info.id,
-                                                "order": store_orders,
-                                                "delivery_instructions": request.data[1]["delivery_msg"],
-                                                "total_price": request.data[1]["total_price"]})
+                serializer = OrderSerializer(
+                    data={
+                        "email": email,
+                        "personal_info_used": new_delivery_info.id,
+                        "order": store_orders,
+                        "delivery_instructions":
+                            request.data[1]["delivery_msg"],
+                        "total_price":
+                            request.data[1]["total_price"]
+                        }
+                    )
                 if serializer.is_valid():
-                    
                     serializer.save()
                     return Response({"message": "Order Successful"})
                 else:
-                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST
+                        )
         else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response({"message": "hello"})    
-    
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+                )
+        return Response({"message": "hello"})

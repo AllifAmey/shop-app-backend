@@ -11,6 +11,7 @@ from django.contrib.auth.models import (
 
 from shop.models import Cart, OrderList, DefaultUserDeliveryInfo
 
+
 class UserManager(BaseUserManager):
     """Manager for users."""
 
@@ -25,9 +26,9 @@ class UserManager(BaseUserManager):
         Cart.objects.create(user=user)
         OrderList.objects.create(user=user)
         DefaultUserDeliveryInfo.objects.create(user=user)
-        
+
         return user
-    
+
     def create_superuser(self, email, password):
         """Create and return a new superuser."""
         user = self.create_user(email, password)
@@ -36,6 +37,7 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
 
         return user
+
 
 class User(AbstractBaseUser, PermissionsMixin):
     """User in the system."""

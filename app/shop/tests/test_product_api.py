@@ -36,6 +36,10 @@ def product_specific_url(product_id):
     """Create and return a product detail URL."""
     return reverse('shop:products-detail', args=[product_id])
 
+def product_delete_url(product_id):
+    """Delete and return a product delete URL."""
+    return reverse('shop:delete_products-detail', args=[product_id])
+
 def create_user(**params):
     """Create and return a new user."""
     return get_user_model().objects.create_user(**params)
@@ -75,8 +79,8 @@ class PublicApiTestProduct(TestCase):
         serializer = ProductSerializer(product)
         self.assertEqual(res.data, serializer.data)
 
-class ProductCreateAdminApiTests(TestCase):
-    """Test authenticated Admin Product Create API requests."""
+class ProductCreateUserApiTests(TestCase):
+    """Test authenticated user Product Create API requests."""
     
     def setUp(self):
         self.client = APIClient()
@@ -111,8 +115,8 @@ class ProductCreateAdminApiTests(TestCase):
         
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
-class PrivateProductCreateAdminApiTests(TestCase):
-    """Test authenticated Product Create API requests."""
+class ProductCreateAdminApiTests(TestCase):
+    """Test Admin Product Create API requests."""
     
     def setUp(self):
         self.client = APIClient()
@@ -132,4 +136,45 @@ class PrivateProductCreateAdminApiTests(TestCase):
         res = self.client.post(CREATE_PRODUCTS_URL, payload)
         
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+class ProductDeleteUserApiTests(TestCase):
+    """Test authenticated user Product Delete API requests."""
     
+    def setUp(self):
+        self.client = APIClient()
+        self.user = create_user(email='user@example.com', password='test123')
+    
+    def test_product_delete_anon(self):
+        """Test anon can't delete product"""
+        product = create_product()
+        url = product_delete_url(product.id)
+        res = self.client.delete(url)
+        
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_product_create_user(self):
+        """Test authenticated user can't delete product"""
+        product = create_product()
+        url = product_delete_url(product.id)
+        res = self.client.delete(url)
+        self.client.force_authenticate(user=self.user)
+        res = self.client.delete(url)
+        
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+class ProductDeleteAdminApiTests(TestCase):
+    """Test Admin Product Create API requests."""
+    
+    def setUp(self):
+        self.client = APIClient()
+        self.admin_user = create_admin_user(email='user@example.com', password='test123')
+        self.client.force_authenticate(user=self.admin_user)
+    
+    def test_product_delete_admin(self):
+        """Test Admin can delete Product"""
+
+        product = create_product()
+        url = product_delete_url(product.id)
+        res = self.client.delete(url)
+
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)

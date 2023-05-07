@@ -39,7 +39,7 @@ router.register(
 router.register(
     'products/delete',
     views.DestroyProductViewSet,
-    basename='delete products'
+    basename='delete_products'
     )
 
 urlpatterns = [

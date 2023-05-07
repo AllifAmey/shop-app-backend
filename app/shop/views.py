@@ -299,7 +299,7 @@ class CartItemViewset(viewsets.ModelViewSet):
             res = {'cart_item_id': recent_cart_item.id,
                    'product': serializer.data,
                    'quantity': recent_cart_item.quantity}
-            return Response(res, status=status.HTTP_200_OK)
+            return Response(res, status=status.HTTP_201_CREATED)
         else:
             return Response(
                 serializer.errors,

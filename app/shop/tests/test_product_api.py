@@ -1,5 +1,5 @@
 """
-Tests for shop api
+Tests for product api
 """
 from decimal import Decimal
 

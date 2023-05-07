@@ -25,6 +25,7 @@ from drf_spectacular.utils import extend_schema,\
 from rest_framework import serializers
 from django.db.models import Sum, Count
 from django.db.models.functions import ExtractMonth
+from django.db import connection
 
 
 class DataAnalysisShopAPIView(APIView):
@@ -99,27 +100,41 @@ class DataAnalysisShopAPIView(APIView):
         Solution:
         models.Order.objects.annotate(month=ExtractMonth('date_ordered'))
         .values('month').annotate(total_sales=Sum('total_price'))
+        After:
+        Database gets hit 5 times ( Not reliant on data expanding )
+        Before:
+        Database gets hit 8 times ( based on data expanded )
+        Improve is seen as api scales.
         """
         monthly_sales = models.Order.objects.annotate(
             month=ExtractMonth('date_ordered'))\
             .values('month').annotate(total_sales=Sum('total_price'))
         for sale in monthly_sales:
             sales_per_month[sale['month']-1]['sale'] = sale['total_sales']
+        print(len(connection.queries))  # hits database
+        print(connection.queries[-1]['sql'])
         most_popular = models.Product.objects.annotate(
             num_orderItem=Count('orderitem')).order_by("-num_orderItem")[0]
+        print(len(connection.queries))  # hits database
+        print(connection.queries[-1]['sql'])
         least_popular = models.Product.objects.annotate(
             num_orderItem=Count('orderitem')).order_by("num_orderItem")[0]
+        print(len(connection.queries))  # hits database
+        print(connection.queries[-1]['sql'])
         count_most = models.OrderItem.objects.filter(
             product=most_popular).count()
+        print(len(connection.queries))  # hits database
+        print(connection.queries[-1]['sql'])
         count_least = models.OrderItem.objects.filter(
             product=least_popular).count()
+        print(len(connection.queries))  # hits database
+        print(connection.queries[-1]['sql'])
         serializer_most_popular_product = ProductSerializer(
             most_popular
             )
         serializer_least_popular_product = ProductSerializer(
             least_popular
             )
-
         most_popular_data = {
             'most_popular': serializer_most_popular_product.data,
             'occurance': count_most
@@ -128,9 +143,7 @@ class DataAnalysisShopAPIView(APIView):
             'least_popular': serializer_least_popular_product.data,
             'occurance': count_least
             }
-
         popularity_metric = [most_popular_data, least_popular_data]
-
         return Response({"sales_per_month": sales_per_month,
                          'popularity_metric': popularity_metric})
 
@@ -181,7 +194,7 @@ class CreateProduct(APIView):
     serializer_class = ProductSerializer
     queryset = models.Product.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     def post(self, request):
         """Create product"""
@@ -316,13 +329,17 @@ class OrderViewset(viewsets.ModelViewSet):
 
     def list(self, request):
         """Display user's list of orders"""
-        user = request.user
+        user = request.user#
+        
+        # TODO: Find a way to join the order table, the order item table and the product table.
+        # Use that fat table and query it. 
         if user.is_staff:
             # if staff return all orders in the data base.
             # maybe change the logic in the future if the amount of orders ,
             # is too much for servers.
+            all_orders = models.Order.objects.prefetch_related('order__product').order_by("id")
             serializer = self.serializer_class(
-                self.get_queryset().order_by("id"),
+                all_orders,
                 many=True
                 )
             for order in serializer.data:
@@ -351,6 +368,7 @@ class OrderViewset(viewsets.ModelViewSet):
                     )
                 Infoserializer = UserDeliveryInfoSerializer(personal_info_used)
                 order.update({"personal_info_used": Infoserializer.data})
+            print(len(connection.queries))
             return Response(serializer.data)
 
         user_order_list = models.OrderList.objects.get(user=user)
@@ -393,6 +411,7 @@ class OrderViewset(viewsets.ModelViewSet):
             "total_price": "5.99"
         },
         """
+        print(len(connection.queries))
         return Response(serializer.data)
 
 

@@ -146,7 +146,8 @@ class DataAnalysisShopAPIView(APIView):
             }
         popularity_metric = [most_popular_data, least_popular_data]
         return Response({"sales_per_month": sales_per_month,
-                         'popularity_metric': popularity_metric})
+                         'popularity_metric': popularity_metric},
+                        status=status.HTTP_200_OK)
 
 
 class ListProductViewset(viewsets.ModelViewSet):

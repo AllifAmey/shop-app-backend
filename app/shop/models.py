@@ -121,7 +121,7 @@ class UserDeliveryInfo(models.Model):
 class Order(models.Model):
     """Orders for each user/anonymous user"""
     # for future referance user and email are both optional
-    # when creating an order.docker-compose run --rm app sh -c "flake8"
+    # when creating an order.
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

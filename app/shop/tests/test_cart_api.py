@@ -1,5 +1,5 @@
 """
-Tests for shop api
+Tests for cart api
 """
 from decimal import Decimal
 
@@ -17,7 +17,7 @@ from shop.models import Product, CartItem
 LIST_CART_Items_URL = reverse('shop:user_cart_items-list')
 
 def cartItem_delete_url(cartItem_id):
-    """Delete and return a product delete URL."""
+    """Create and return a cart delete URL."""
     return reverse('shop:user_cart_items-detail', args=[cartItem_id])
 
 
@@ -40,7 +40,7 @@ def create_user(**params):
     """Create and return a new user."""
     return get_user_model().objects.create_user(**params)
 
-class CartUserApiTestProduct(TestCase):
+class CartUserApiTest(TestCase):
     """Test authenticated user cart API request"""
     
     def setUp(self):

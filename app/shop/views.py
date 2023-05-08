@@ -39,6 +39,7 @@ class DataAnalysisShopAPIView(APIView):
         return models.Order.objects.all()
 
     def get(self, request):
+        """Calculate and retrieve backend analysis."""
         sales_per_month = [{"month": "Jan",
                             "sale": 0},
                            {"month": "Feb",
@@ -322,7 +323,7 @@ class OrderViewset(viewsets.ModelViewSet):
     queryset = models.Order.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [permissions.UpdateOwnOrder]
-    http_method_names = ['get', 'post', 'patch', 'delete']
+    http_method_names = ['get', 'post', 'patch']
 
     def get_queryset(self):
         return models.Order.objects.all()
@@ -503,7 +504,7 @@ class UserDeliveryInfoViewset(viewsets.ModelViewSet):
             ),
         responses={
             '2XX': inline_serializer(
-                name='Order_success',
+                name='Order_success_user',
                 fields={
                     "message": serializers.CharField()
                     }
@@ -526,6 +527,12 @@ class UserDeliveryInfoViewset(viewsets.ModelViewSet):
             # create the deliveryInfo
             # new_deliveryInfo = serializer.save()
             # create the order items by grabbing the user's cart
+            if request.user.id != request.data[0]['user']:
+                # stop request if not user.
+                return Response(
+                    {"Message": "You have been reported to the police"},
+                    status=status.HTTP_403_FORBIDDEN
+                    )
             user_cart = "empty"
             if user_exist:
                 user_cart = models.Cart.objects.get(user=user)
@@ -584,7 +591,6 @@ class UserDeliveryInfoViewset(viewsets.ModelViewSet):
                     old_OrderList = models.OrderList.objects.get(user=user)
                     old_OrderList.order_list.add(new_order)
                     # now the order is added, delete the cart items.
-                    print(user)
                     old_cartItems = models.CartItem.objects.filter(user=user)
                     old_cartItems.delete()
                 else:
@@ -599,7 +605,7 @@ class UserDeliveryInfoViewset(viewsets.ModelViewSet):
                     )
             return Response(
                 {"message": "order is valid"},
-                status=status.HTTP_200_OK
+                status=status.HTTP_201_CREATED
                 )
         else:
             return Response(
@@ -651,7 +657,7 @@ class PostOrderAnonymousAPIView(APIView):
         responses={
             '2XX':
                 inline_serializer(
-                    name='Order_success',
+                    name='Order_success_anonymous',
                     fields={
                         "message":
                             serializers.CharField()

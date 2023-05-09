@@ -69,39 +69,22 @@ class DataAnalysisShopAPIView(APIView):
         """
         Problem with current solution:
 
-        Product Popularity Algorithm problem -
-        I keep looping over the same queryset when I could
-        get my answer in 2 operations 0(2)
-        Current logic:
-        Loop over order models in database ( imagine 1000x )
-        Then perform python's max function o(n^2)
-        Extremely inefficient
+        Both the popularity and sales metric rely ,
+        on looping over available models and extracting,
+        data accordingly.
+
+        Overtime as API scales, the number of operations would,
+        increase expotentially. This would be a O(n^2) problem.
 
         Solution:
-        most_popular = models.Product.objects\
-            .annotate(num_orderItem=Count('orderitem'))\
-                .order_by("-num_orderItem")[0]
-        least_popular = models.Product.objects\
-            .annotate(num_orderItem=Count('orderitem'))\
-                .order_by("num_orderItem")[0]
-        count_most = models.OrderItem.objects\
-            .filter(product=most_popular).count()
-        count_most = models.OrderItem.objects\
-            .filter(product=least_popular).count()
-        4 queries. 0(4) Much more efficient long term.
+        Sales per month metric -
+        Complex query set that seperates each data row according to,
+        month. Use the SQL SUM to the columns for each month.
+        Product metric -
+        Group each product with Order items associated with product,
+        COUNT each one order it by desc or asc and limit by 1.
 
-        Problem with current solution:
-
-        Sales for each month algorithim problem -
-        I keep looping over the query set and many operations on each loop
-        Overtime as the application scales the operation would be 0(n^2)
-        Imagine 1000x rows
-        In theory I could probably do 12 queries.
-
-        Solution:
-        models.Order.objects.annotate(month=ExtractMonth('date_ordered'))
-        .values('month').annotate(total_sales=Sum('total_price'))
-        After:
+        After improvement:
         Database gets hit 5 times ( Not reliant on data expanding )
         Before:
         Database gets hit 8 times ( based on data expanded )
@@ -112,24 +95,14 @@ class DataAnalysisShopAPIView(APIView):
             .values('month').annotate(total_sales=Sum('total_price'))
         for sale in monthly_sales:
             sales_per_month[sale['month']-1]['sale'] = sale['total_sales']
-        print(len(connection.queries))  # hits database
-        print(connection.queries[-1]['sql'])
         most_popular = models.Product.objects.annotate(
             num_orderItem=Count('orderitem')).order_by("-num_orderItem")[0]
-        print(len(connection.queries))  # hits database
-        print(connection.queries[-1]['sql'])
         least_popular = models.Product.objects.annotate(
             num_orderItem=Count('orderitem')).order_by("num_orderItem")[0]
-        print(len(connection.queries))  # hits database
-        print(connection.queries[-1]['sql'])
         count_most = models.OrderItem.objects.filter(
             product=most_popular).count()
-        print(len(connection.queries))  # hits database
-        print(connection.queries[-1]['sql'])
         count_least = models.OrderItem.objects.filter(
             product=least_popular).count()
-        print(len(connection.queries))  # hits database
-        print(connection.queries[-1]['sql'])
         serializer_most_popular_product = ProductSerializer(
             most_popular
             )
@@ -145,6 +118,13 @@ class DataAnalysisShopAPIView(APIView):
             'occurance': count_least
             }
         popularity_metric = [most_popular_data, least_popular_data]
+
+        for sql in enumerate(connection.queries):
+            if sql[0] != 0:
+                print(f'SQL Number {sql[0]}')
+                print(sql[1]['sql'])
+                print("\n")
+
         return Response({"sales_per_month": sales_per_month,
                          'popularity_metric': popularity_metric},
                         status=status.HTTP_200_OK)
@@ -331,15 +311,17 @@ class OrderViewset(viewsets.ModelViewSet):
 
     def list(self, request):
         """Display user's list of orders"""
-        user = request.user#
-        
-        # TODO: Find a way to join the order table, the order item table and the product table.
-        # Use that fat table and query it. 
+        user = request.user
+
+        # TODO: Find a way to join the order table,
+        # the order item table and the product table.
+        # Use that fat table and query it.
         if user.is_staff:
             # if staff return all orders in the data base.
             # maybe change the logic in the future if the amount of orders ,
             # is too much for servers.
-            all_orders = models.Order.objects.prefetch_related('order__product').order_by("id")
+            all_orders = models.Order.objects\
+                .prefetch_related('order__product').order_by("id")
             serializer = self.serializer_class(
                 all_orders,
                 many=True

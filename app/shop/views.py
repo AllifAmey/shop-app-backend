@@ -65,31 +65,6 @@ class DataAnalysisShopAPIView(APIView):
                            {"month": "Dec",
                             "sale": 0},
                            ]
-
-        """
-        Problem with current solution:
-
-        Both the popularity and sales metric rely ,
-        on looping over available models and extracting,
-        data accordingly.
-
-        Overtime as API scales, the number of operations would,
-        increase expotentially. This would be a O(n^2) problem.
-
-        Solution:
-        Sales per month metric -
-        Complex query set that seperates each data row according to,
-        month. Use the SQL SUM to the columns for each month.
-        Product metric -
-        Group each product with Order items associated with product,
-        COUNT each one order it by desc or asc and limit by 1.
-
-        After improvement:
-        Database gets hit 5 times ( Not reliant on data expanding )
-        Before:
-        Database gets hit 8 times ( based on data expanded )
-        Improve is seen as api scales.
-        """
         monthly_sales = models.Order.objects.annotate(
             month=ExtractMonth('date_ordered'))\
             .values('month').annotate(total_sales=Sum('total_price'))
@@ -118,13 +93,13 @@ class DataAnalysisShopAPIView(APIView):
             'occurance': count_least
             }
         popularity_metric = [most_popular_data, least_popular_data]
-
+        """
         for sql in enumerate(connection.queries):
             if sql[0] != 0:
                 print(f'SQL Number {sql[0]}')
                 print(sql[1]['sql'])
                 print("\n")
-
+        """
         return Response({"sales_per_month": sales_per_month,
                          'popularity_metric': popularity_metric},
                         status=status.HTTP_200_OK)
@@ -156,6 +131,7 @@ class DestroyProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
     def destroy(self, request, pk):
+        """Destroys product according to PK given."""
         if request.user.is_staff:
             product = models.Product.objects.get(id=pk)
             product.delete()
@@ -502,7 +478,7 @@ class UserDeliveryInfoViewset(viewsets.ModelViewSet):
         try:
             user = request.user
             user_exist = True
-        except:
+        except Exception:
             user_exist = False
         # process the data and check if user inputted right data
         serializer = self.serializer_class(data=request.data[0])

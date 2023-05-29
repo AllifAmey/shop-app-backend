@@ -68,5 +68,8 @@ urlpatterns = [
         views.DataAnalysisShopAPIView.as_view(),
         name='data_analysis'
         ),
+    path('external',
+         views.ExternalAPIView.as_view(),
+         name="external"),
     path('', include(router.urls)),
 ]

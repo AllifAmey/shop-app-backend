@@ -65,3 +65,9 @@ class DefaultUserDeliveryInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.DefaultUserDeliveryInfo
         fields = ['id', 'user', 'default_info']
+
+
+class ExternalSerializer(serializers.Serializer):
+    """Serializes External APi"""
+    type = serializers.CharField(max_length=200)
+    content = serializers.CharField(allow_blank=True)

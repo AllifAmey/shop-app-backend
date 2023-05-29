@@ -12,7 +12,8 @@ from shop.serializers import (
     OrderSerializer,
     OrderItemSerializer,
     OrderListSerializer,
-    UserDeliveryInfoSerializer
+    UserDeliveryInfoSerializer,
+    ExternalSerializer
 )
 from rest_framework.response import Response
 from rest_framework import status
@@ -26,6 +27,8 @@ from rest_framework import serializers
 from django.db.models import Sum, Count
 from django.db.models.functions import ExtractMonth
 from django.db import connection
+import requests
+import json
 
 
 class DataAnalysisShopAPIView(APIView):
@@ -93,13 +96,13 @@ class DataAnalysisShopAPIView(APIView):
             'occurance': count_least
             }
         popularity_metric = [most_popular_data, least_popular_data]
-        """
+
         for sql in enumerate(connection.queries):
             if sql[0] != 0:
                 print(f'SQL Number {sql[0]}')
                 print(sql[1]['sql'])
                 print("\n")
-        """
+
         return Response({"sales_per_month": sales_per_month,
                          'popularity_metric': popularity_metric},
                         status=status.HTTP_200_OK)
@@ -682,3 +685,50 @@ class PostOrderAnonymousAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
                 )
         return Response({"message": "hello"})
+
+
+class ExternalAPIView(APIView):
+    """Handles external stuff"""
+    serializer_class = ExternalSerializer
+
+    def post(self, request):
+        """Recieves and handles"""
+        # note:
+        # I am not sure if I should use environmental variables
+        # no one is going to see this codebase anyway.
+        if request.data['type'] == "weather":
+            weather_api_key = "d5f13bf4e6778a1974946a9ce14e7428"
+            r = requests.get(
+                "https://api.openweathermap.org"
+                "/data/2.5/weather?q=London,"
+                f"uk&APPID={weather_api_key}")
+            res = r.json()
+            weather_icon = res["weather"][0]["icon"]
+            return Response({"message": f"{weather_icon}"})
+        if request.data['type'] == "email":
+            email_params = json.loads(request.data["content"])
+            emailjs_api_key = "yuixfm0RKnxAsx74W"
+            service_id = "service_cwfc9gm"
+            template_id = "template_2406ad3"
+            data = {
+                "service_id": service_id,
+                "template_id": template_id,
+                "user_id": emailjs_api_key,
+                "template_params": {
+                    "first_name": email_params["first_name"],
+                    "last_name": email_params["last_name"],
+                    "your_name": email_params["your_name"],
+                    "email": email_params["email"],
+                    "phone_number": email_params["phone_number"],
+                    "message": email_params["message"]
+                    },
+                "accessToken": "wBzl314qFvQ5CKZOrk7wL",
+                }
+            r = requests.post(
+                'https://api.emailjs.com/api/v1.0/email/send',
+                json=data)
+            if r.status_code != 200:
+                return Response(
+                    {"Message": "Error"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"Message": "Success"}, status=status.HTTP_200_OK)
+        return Response({"Message": "Hello there wonderer"})

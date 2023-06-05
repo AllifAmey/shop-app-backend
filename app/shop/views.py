@@ -10,15 +10,15 @@ from shop.serializers import (
     CartSerializer,
     CartItemSerializer,
     OrderSerializer,
+    OrderReadSerializer,
     OrderItemSerializer,
-    OrderListSerializer,
     UserDeliveryInfoSerializer,
     ExternalSerializer
 )
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.renderers import JSONRenderer
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAdminUser
 from shop import permissions
 from shop import models
 from drf_spectacular.utils import extend_schema,\
@@ -239,7 +239,8 @@ class CartItemViewset(viewsets.ModelViewSet):
     def create(self, request):
         """Allows user to post user cart items"""
         # check if user requesting is user
-        if request.user.id != request.data['user']:
+        if request.user.id != int(request.data['user']):
+            print("hello")
             return Response({'Message': "Unauthorised"},
                             status=status.HTTP_401_UNAUTHORIZED)
         # check request.data is validated
@@ -303,11 +304,11 @@ class OrderItemViewset(viewsets.ModelViewSet):
 
 class OrderViewset(viewsets.ModelViewSet):
     """Users can see their list of orders """
-    serializer_class = OrderSerializer
+    serializer_class = OrderReadSerializer
     queryset = models.Order.objects.all()
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [permissions.UpdateOwnOrder]
-    http_method_names = ['get', 'post', 'patch']
+    http_method_names = ['get']
 
     def get_queryset(self):
         return models.Order.objects.all()
@@ -316,146 +317,29 @@ class OrderViewset(viewsets.ModelViewSet):
         """Display user's list of orders"""
         user = request.user
 
-        # TODO: Find a way to join the order table,
-        # the order item table and the product table.
-        # Use that fat table and query it.
         if user.is_staff:
-            # if staff return all orders in the data base.
-            # maybe change the logic in the future if the amount of orders ,
-            # is too much for servers.
+            # reduced queries from 22 to 1 - achievement note.
+            # how?
+            # I changed the serializer to serializer there instead of ,
+            # manually doing it here.
             all_orders = models.Order.objects\
-                .prefetch_related('order__product').order_by("id")
-            serializer = self.serializer_class(
+                .select_related('user').order_by("id")
+            serializer = OrderReadSerializer(
                 all_orders,
                 many=True
                 )
-            for order in serializer.data:
-                order_item = models.OrderItem.objects.filter(
-                    pk__in=order["order"]
-                    )
-                order_item_serializer = OrderItemSerializer(
-                    order_item,
-                    many=True
-                    )
-                order_item_list = []
-                for order_item_model in order_item_serializer.data:
-                    product_id = order_item_model["product"]
-                    product = models.Product.objects.get(id=product_id)
-                    product_serializer = ProductSerializer(product)
-                    quantity = order_item_model["quantity"]
-                    order_item_obj = {
-                        "order_item_id": order_item_model["id"],
-                        "product": product_serializer.data,
-                        "quantity": quantity
-                    }
-                    order_item_list.append(order_item_obj)
-                order.update({"order": order_item_list})
-                personal_info_used = models.UserDeliveryInfo.objects.get(
-                    pk=order["personal_info_used"]
-                    )
-                Infoserializer = UserDeliveryInfoSerializer(personal_info_used)
-                order.update({"personal_info_used": Infoserializer.data})
-            print(len(connection.queries))
-            return Response(serializer.data)
 
-        user_order_list = models.OrderList.objects.get(user=user)
-        serializer = OrderListSerializer(user_order_list)
-        orders = serializer.data["order_list"]
-        order = models.Order.objects.filter(pk__in=orders)
-        serializer = OrderSerializer(order, many=True)
-        for order in serializer.data:
-            order_item = models.OrderItem.objects.filter(pk__in=order["order"])
-            order_item_serializer = OrderItemSerializer(order_item, many=True)
-            order_item_list = []
-            for order_item_model in order_item_serializer.data:
-                product_id = order_item_model["product"]
-                product = models.Product.objects.get(id=product_id)
-                product_serializer = ProductSerializer(product)
-                quantity = order_item_model["quantity"]
-                order_item_obj = {
-                    "product": product_serializer.data,
-                    "quantity": quantity
-                }
-                order_item_list.append(order_item_obj)
-            order.update({"order": order_item_list})
-            personal_info_used = models.UserDeliveryInfo.objects.get(
-                pk=order["personal_info_used"]
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        # reduced queries from 20 to 1 - achievement note
+        # I changed the serializer to serialize there instead of ,
+        # manually doing it here.
+        all_user_orders = models.Order.objects\
+            .select_related('user').order_by("id").filter(user=user)
+        serializer = OrderReadSerializer(
+                all_user_orders,
+                many=True
                 )
-            Infoserializer = UserDeliveryInfoSerializer(personal_info_used)
-            order.update({"personal_info_used": Infoserializer.data})
-        """
-        {
-            "id": 20,
-            "user": 2,
-            "email": "allifamey487@gmail.com",
-            "order": [
-            26
-            ],
-            "personal_info_used": 25,
-            "delivery_instructions": "awefawefawef",
-            "delivery_status": "Processing Order",
-            "date_ordered": "2022-12-24",
-            "total_price": "5.99"
-        },
-        """
-        print(len(connection.queries))
-        return Response(serializer.data)
-
-
-class OrderListView(APIView):
-    """Users can see their list of orders """
-    serializer_class = OrderListSerializer
-    queryset = models.OrderList.objects.all()
-    authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """Display user's list of orders"""
-        user = request.user
-        user_order_list = models.OrderList.objects.get(user=user)
-        serializer = self.serializer_class(user_order_list)
-        print(serializer.data["order_list"])
-        orders = serializer.data["order_list"]
-        order = models.Order.objects.filter(pk__in=orders)
-        serializer = OrderSerializer(order, many=True)
-        return Response(serializer.data)
-
-
-class MassDeleteAPIView(APIView):
-    """Allows the deletion of different objects on mass"""
-    authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        request=inline_serializer(
-            name="Mass_delete",
-            fields={
-                "object_type": serializers.CharField(),
-                "ids": serializers.ListField(
-                    child=serializers.IntegerField(min_value=1)
-                    )
-                }
-            ),
-        responses={
-            '2XX': inline_serializer(
-                name='Success',
-                fields={"message": serializers.CharField()}
-                )
-            }
-    )
-    def post(self, request):
-        """Deletes objects on mass"""
-        user = request.user
-        object_type = request.data.get("object_type")
-        ids = request.data.get("ids")
-
-        if object_type == "cart":
-            # TODO: check addition things
-            # such as whether those ids listed are related to the user.
-            cart_items = models.CartItem.objects.filter(pk__in=ids)
-            print(user)
-            cart_items.delete()
-        return Response({"Message": "Items successfully deleted"})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class UserDeliveryInfoViewset(viewsets.ModelViewSet):
@@ -499,100 +383,56 @@ class UserDeliveryInfoViewset(viewsets.ModelViewSet):
     )
     def create(self, request):
         """Create delivery info and order"""
-        user_exist = "Don't know"
-
-        # establish if anonymous user.
-        try:
-            user = request.user
-            user_exist = True
-        except Exception:
-            user_exist = False
+        user = request.user
+        if user.id != int(request.data[0]['user']):
+            # stop request if not user.
+            return Response(
+                {"Message": "You have been reported to the police"},
+                status=status.HTTP_403_FORBIDDEN)
         # process the data and check if user inputted right data
         serializer = self.serializer_class(data=request.data[0])
         if serializer.is_valid():
             # create the deliveryInfo
-            # new_deliveryInfo = serializer.save()
-            # create the order items by grabbing the user's cart
-            if request.user.id != request.data[0]['user']:
-                # stop request if not user.
-                return Response(
-                    {"Message": "You have been reported to the police"},
-                    status=status.HTTP_403_FORBIDDEN
-                    )
-            user_cart = "empty"
-            if user_exist:
-                user_cart = models.Cart.objects.get(user=user)
-            serializer = CartSerializer(user_cart)
-            user_cart_cartItems = serializer.data['products']
-            store_orders = []
-            for cartItem in user_cart_cartItems:
-                single_cartItem = models.CartItem.objects.get(id=cartItem)
-                serializer = CartItemSerializer(single_cartItem)
-                product = serializer.data['product']
-                quantity = serializer.data['quantity']
-                email = request.data[0]['email']
-                serializer = OrderItemSerializer(
-                    data={
-                        "user": user.id,
-                        "email": email,
-                        "product": product,
-                        "quantity": quantity
-                        }
-                    )
-                if serializer.is_valid():
-                    new_OrderItem = serializer.save()
-                    store_orders.append(new_OrderItem.id)
-                else:
-                    return Response(
-                        serializer.errors,
-                        status=status.HTTP_400_BAD_REQUEST
-                        )
-            # here is where the order
+            delivery_info_obj = serializer.save()
+            user_cart = models.CartItem.objects\
+                .select_related('user')\
+                .filter(user=user)
             email = request.data[0]['email']
-            serializer = self.serializer_class(data=request.data[0])
-            new_delivery_info = None
-            if serializer.is_valid():
-                new_delivery_info = serializer.save()
-            else:
-                return Response(
-                    serializer.errors,
-                    status=status.HTTP_400_BAD_REQUEST
-                    )
-
-            serializer = OrderSerializer(
-                data={
-                    "user": user.id,
-                    "email": email,
-                    "personal_info_used": new_delivery_info.id,
-                    "order": store_orders,
-                    "delivery_instructions": request.data[1]["delivery_msg"],
-                    "total_price": request.data[1]["total_price"]
-                    }
-                )
-            if serializer.is_valid():
-                # lastly attach the user's order to the order list
-                # so they can view it and all the necessary information
-                new_order = serializer.save()
-                if serializer.is_valid():
-                    old_OrderList = models.OrderList.objects.get(user=user)
-                    old_OrderList.order_list.add(new_order)
-                    # now the order is added, delete the cart items.
+            new_orderitems = [{
+                        'user': user.id,
+                        'email': email,
+                        'product': cart_item.product.id,
+                        'quantity': cart_item.quantity,
+                    } for cart_item in user_cart]
+            orderitem_serializer = OrderItemSerializer(
+                data=new_orderitems, many=True)
+            if orderitem_serializer.is_valid():
+                new_orderitems_obj = orderitem_serializer.save()
+                orderItem_ids = [
+                    new_orderItem.id for new_orderItem in new_orderitems_obj]
+                new_order_serializer = OrderSerializer(data={
+                    'user': user.id,
+                    'email': email,
+                    'order': orderItem_ids,
+                    'personal_info_used': delivery_info_obj.id,
+                    'delivery_instructions': request.data[1]['delivery_msg'],
+                    'total_price': request.data[1]['total_price']
+                })
+                if new_order_serializer.is_valid():
+                    new_order_serializer.save()
                     old_cartItems = models.CartItem.objects.filter(user=user)
                     old_cartItems.delete()
+                    return Response(
+                        new_order_serializer.data,
+                        status=status.HTTP_201_CREATED)
                 else:
                     return Response(
-                        serializer.errors,
-                        status=status.HTTP_400_BAD_REQUEST
-                        )
+                        new_order_serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST)
             else:
                 return Response(
-                    serializer.errors,
-                    status=status.HTTP_400_BAD_REQUEST
-                    )
-            return Response(
-                {"message": "order is valid"},
-                status=status.HTTP_201_CREATED
-                )
+                    orderitem_serializer.errors,
+                    status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response(
                 serializer.errors,

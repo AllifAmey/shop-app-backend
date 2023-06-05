@@ -49,16 +49,6 @@ urlpatterns = [
         name='post_orders_anonymously'
         ),
     path(
-        'user/orders/',
-        views.OrderListView.as_view(),
-        name='user_list_of_orders'
-        ),
-    path(
-        'user/mass_delete',
-        views.MassDeleteAPIView.as_view(),
-        name='deletes_objects_on_mass'
-        ),
-    path(
         'create/product',
         views.CreateProduct.as_view(),
         name='create_product'

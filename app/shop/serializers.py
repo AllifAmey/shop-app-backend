@@ -6,6 +6,22 @@ from rest_framework import serializers
 from shop import models
 
 
+class UserDeliveryInfoSerializer(serializers.ModelSerializer):
+    """Serializes OrderList Model"""
+    class Meta:
+        model = models.UserDeliveryInfo
+        fields = ['id', 'user', 'first_name', 'last_name', 'email',
+                  'phone_number', 'address', 'city', 'country',
+                  'post_code', 'delivery_type']
+
+
+class DefaultUserDeliveryInfoSerializer(serializers.ModelSerializer):
+    """Serializes OrderList Model"""
+    class Meta:
+        model = models.DefaultUserDeliveryInfo
+        fields = ['id', 'user', 'default_info']
+
+
 class ProductSerializer(serializers.ModelSerializer):
     """Serializes Product Model"""
     class Meta:
@@ -44,27 +60,32 @@ class OrderSerializer(serializers.ModelSerializer):
                   'delivery_status', 'date_ordered', 'total_price']
 
 
+class OrderItemReadSerializer(serializers.ModelSerializer):
+    """Serializes Order Model"""
+    product = ProductSerializer()
+
+    class Meta:
+        model = models.OrderItem
+        fields = ['id', 'user', 'email', 'product', 'quantity', 'date_ordered']
+
+
+class OrderReadSerializer(serializers.ModelSerializer):
+    """Serializes Order Model to read only"""
+    order = OrderItemReadSerializer(many=True)
+    personal_info_used = UserDeliveryInfoSerializer()
+
+    class Meta:
+        model = models.Order
+        fields = ['id', 'user', 'email', 'order',
+                  'personal_info_used', 'delivery_instructions',
+                  'delivery_status', 'date_ordered', 'total_price']
+
+
 class OrderListSerializer(serializers.ModelSerializer):
     """Serializes OrderList Model"""
     class Meta:
         model = models.OrderList
         fields = ['id', 'user', 'order_list']
-
-
-class UserDeliveryInfoSerializer(serializers.ModelSerializer):
-    """Serializes OrderList Model"""
-    class Meta:
-        model = models.UserDeliveryInfo
-        fields = ['id', 'user', 'first_name', 'last_name', 'email',
-                  'phone_number', 'address', 'city', 'country',
-                  'post_code', 'delivery_type']
-
-
-class DefaultUserDeliveryInfoSerializer(serializers.ModelSerializer):
-    """Serializes OrderList Model"""
-    class Meta:
-        model = models.DefaultUserDeliveryInfo
-        fields = ['id', 'user', 'default_info']
 
 
 class ExternalSerializer(serializers.Serializer):

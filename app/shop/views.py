@@ -96,7 +96,7 @@ class DataAnalysisShopAPIView(APIView):
             'occurance': count_least
             }
         popularity_metric = [most_popular_data, least_popular_data]
-
+        # from O(n+1) to O(6) - achievement note.
         for sql in enumerate(connection.queries):
             if sql[0] != 0:
                 print(f'SQL Number {sql[0]}')
@@ -212,10 +212,6 @@ class ListCartView(viewsets.ModelViewSet):
 
         return Response({'id': serializer.data[0]['id'], 'products': products})
 
-# new apis involving the new models
-# this is now the standard
-# TODO: Make sure when cart item is created attach to user - change post method
-
 
 class CartItemViewset(viewsets.ModelViewSet):
     """Users can create cart items"""
@@ -226,18 +222,13 @@ class CartItemViewset(viewsets.ModelViewSet):
 
     def list(self, request):
         """Displays user's cart"""
-        user = request.user
-        user_cart = models.Cart.objects.get(user=user)
-        # CartItemSerializer
-        # TODO: Join a table then filter it.
-        serializer = CartSerializer(user_cart)
-        products = serializer.data['products']
-        products = models.CartItem.objects.filter(pk__in=products)
+        # this should be the optimal way only 1 query is done to get user data.
+        # query reduced rom 6 to 2 - achievement note.
+        products = models.CartItem.objects.select_related('product')\
+            .filter(user=request.user)
         serializer = self.serializer_class(products, many=True)
         user_cart = []
-
         for product in products:
-
             serializer = ProductSerializer(product.product)
             user_cart.append({'cart_item_id': product.id,
                               'product': serializer.data,
@@ -247,20 +238,53 @@ class CartItemViewset(viewsets.ModelViewSet):
 
     def create(self, request):
         """Allows user to post user cart items"""
-        user = request.user
+        # check if user requesting is user
+        if request.user.id != request.data['user']:
+            return Response({'Message': "Unauthorised"},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        # check request.data is validated
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
-            recent_cart_item = serializer.save()
-            user_cart = models.Cart.objects.get(user=user)
-            user_cart.products.add(recent_cart_item)
-            product = models.Product.objects.get(
-                pk=recent_cart_item.product.pk
-                )
-            serializer = ProductSerializer(product)
-            res = {'cart_item_id': recent_cart_item.id,
-                   'product': serializer.data,
-                   'quantity': recent_cart_item.quantity}
-            return Response(res, status=status.HTTP_201_CREATED)
+            # get product id
+            new_product_id = serializer.validated_data['product'].id
+            # this checks if the product already exist in user cart.
+            user_cart = models.CartItem.objects\
+                .select_related('product')\
+                .filter(user=request.user)\
+                .values_list('product')\
+                .filter(product__id=new_product_id)\
+                .count()
+            # if an existing product is found in cart
+            if user_cart >= 1:
+                # do a patch
+                existing_cartItem = models.CartItem.objects\
+                    .select_related('product')\
+                    .filter(user=request.user, product__id=new_product_id)
+                existing_cartItem.update(
+                    quantity=existing_cartItem[0]
+                    .quantity+request.data['quantity'])
+                product = models.Product.objects.get(
+                    pk=existing_cartItem[0].product.pk
+                    )
+                serializer = ProductSerializer(product)
+                return Response(
+                    {'cart_item_id': existing_cartItem[0].id,
+                     'product': serializer.data,
+                     'quantity': existing_cartItem[0].quantity},
+                    status=status.HTTP_201_CREATED)
+            else:
+                # do a post
+                recent_cart_item = serializer.save()
+                print('Queries performed:', len(connection.queries))
+                product = models.Product.objects.get(
+                    pk=recent_cart_item.product.pk
+                    )
+                print('Queries performed:', len(connection.queries))
+                serializer = ProductSerializer(product)
+                res = {'cart_item_id': recent_cart_item.id,
+                       'product': serializer.data,
+                       'quantity': recent_cart_item.quantity}
+                return Response(res, status=status.HTTP_201_CREATED)
         else:
             return Response(
                 serializer.errors,

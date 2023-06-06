@@ -4,16 +4,6 @@ Models for the shop
 from django.db import models
 from django.conf import settings
 """
-Model name:
-Product
-Model fields:
-Id: 1
-Name: Charfield
-ImageUrl: URLfield
-price: decimalfield
-longDescription: Textfield
-shortDescription: Textfield (use #) as a separator for frontend
-
 keep the below in mind as the product model relies on the id
 to generate the card1 and card2 id.
 python manage.py sqlsequencereset myapp1 myapp2 myapp3

@@ -240,7 +240,6 @@ class CartItemViewset(viewsets.ModelViewSet):
         """Allows user to post user cart items"""
         # check if user requesting is user
         if request.user.id != int(request.data['user']):
-            print("hello")
             return Response({'Message': "Unauthorised"},
                             status=status.HTTP_401_UNAUTHORIZED)
         # check request.data is validated
@@ -276,11 +275,9 @@ class CartItemViewset(viewsets.ModelViewSet):
             else:
                 # do a post
                 recent_cart_item = serializer.save()
-                print('Queries performed:', len(connection.queries))
                 product = models.Product.objects.get(
                     pk=recent_cart_item.product.pk
                     )
-                print('Queries performed:', len(connection.queries))
                 serializer = ProductSerializer(product)
                 res = {'cart_item_id': recent_cart_item.id,
                        'product': serializer.data,
@@ -328,7 +325,6 @@ class OrderViewset(viewsets.ModelViewSet):
                 all_orders,
                 many=True
                 )
-
             return Response(serializer.data, status=status.HTTP_200_OK)
         # reduced queries from 20 to 1 - achievement note
         # I changed the serializer to serialize there instead of ,

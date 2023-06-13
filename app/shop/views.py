@@ -548,7 +548,10 @@ class PostOrderAnonymousAPIView(APIView):
 class ExternalAPIView(APIView):
     """Handles external stuff"""
     serializer_class = ExternalSerializer
-
+    
+    @extend_schema(
+        exclude=True
+    )
     def post(self, request):
         """Recieves and handles external APIs"""
         if request.data['type'] == "weather":

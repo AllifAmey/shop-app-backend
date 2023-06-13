@@ -496,7 +496,6 @@ class PostOrderAnonymousAPIView(APIView):
             # a email is required so issues with their order can be heard
             # email can be used to find their order.
             # I think this is possible
-            
             store_orders = []
             for cartItem in user_cartItems:
                 product = cartItem['product_id']
@@ -552,10 +551,8 @@ class ExternalAPIView(APIView):
 
     def post(self, request):
         """Recieves and handles external APIs"""
-        emailjs_access_token = os.environ.get('EMAILJS_ACCESS_TOKEN')
         if request.data['type'] == "weather":
             weather_api_key = os.environ.get('WEATHER_API_KEY')
-
             r = requests.get(
                 "https://api.openweathermap.org"
                 "/data/2.5/weather?q=London,"

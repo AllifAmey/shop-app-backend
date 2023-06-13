@@ -21,6 +21,9 @@ services:
       - DB_USER=devuser
       - DB_PASS=changeme
       - DEBUG=1
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
+      - EMAILJS_API_KEY=${EMAILJS_API_KEY}
+      - EMAILJS_ACCESS_TOKEN=${EMAILJS_ACCESS_TOKEN}
     depends_on:
       - db
 

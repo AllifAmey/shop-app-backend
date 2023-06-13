@@ -29,6 +29,7 @@ from django.db.models.functions import ExtractMonth
 from django.db import connection
 import requests
 import json
+import os
 
 
 class DataAnalysisShopAPIView(APIView):
@@ -159,9 +160,6 @@ class CreateProduct(APIView):
 
     def post(self, request):
         """Create product"""
-        # for some odd reason this logic works here
-        # but not in ListProductViewset
-
         user = request.user
         if user.is_staff:
             serializer = ProductSerializer(data=request.data)
@@ -196,7 +194,6 @@ class ListCartView(viewsets.ModelViewSet):
         """This returns products from cart."""
         user_cart = models.Cart.objects.filter(user=request.user)
         serializer = self.serializer_class(user_cart, many=True)
-        # maybe use the below for later, it just looks extremely weird.
         # json = JSONRenderer().render(serializer.data)
         products = serializer.data[0]['products']
         user_cart_products = models.Product.objects.filter(pk__in=products)
@@ -498,6 +495,8 @@ class PostOrderAnonymousAPIView(APIView):
             # create the orderitems and attach the email to it.
             # a email is required so issues with their order can be heard
             # email can be used to find their order.
+            # I think this is possible
+            
             store_orders = []
             for cartItem in user_cartItems:
                 product = cartItem['product_id']
@@ -552,12 +551,11 @@ class ExternalAPIView(APIView):
     serializer_class = ExternalSerializer
 
     def post(self, request):
-        """Recieves and handles"""
-        # note:
-        # I am not sure if I should use environmental variables
-        # no one is going to see this codebase anyway.
+        """Recieves and handles external APIs"""
+        emailjs_access_token = os.environ.get('EMAILJS_ACCESS_TOKEN')
         if request.data['type'] == "weather":
-            weather_api_key = "d5f13bf4e6778a1974946a9ce14e7428"
+            weather_api_key = os.environ.get('WEATHER_API_KEY')
+
             r = requests.get(
                 "https://api.openweathermap.org"
                 "/data/2.5/weather?q=London,"
@@ -567,7 +565,8 @@ class ExternalAPIView(APIView):
             return Response({"message": f"{weather_icon}"})
         if request.data['type'] == "email":
             email_params = json.loads(request.data["content"])
-            emailjs_api_key = "yuixfm0RKnxAsx74W"
+            emailjs_api_key = os.environ.get('EMAILJS_API_KEY')
+            emailjs_access_token = os.environ.get('EMAILJS_ACCESS_TOKEN')
             service_id = "service_cwfc9gm"
             template_id = "template_2406ad3"
             data = {
@@ -582,7 +581,7 @@ class ExternalAPIView(APIView):
                     "phone_number": email_params["phone_number"],
                     "message": email_params["message"]
                     },
-                "accessToken": "wBzl314qFvQ5CKZOrk7wL",
+                "accessToken": emailjs_access_token,
                 }
             r = requests.post(
                 'https://api.emailjs.com/api/v1.0/email/send',
